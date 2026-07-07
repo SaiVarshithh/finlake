@@ -1,0 +1,16 @@
+[project]
+name = "finlake"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.0",
+    "pandas>=3.0.3",
+    "pyspark>=4.1.2",
+    "boto3>=1.36.64",
+    "delta-spark>=3.0.0",
+    "openpyxl>=3.1.5",
+    "pyarrow>=19.0.0",
+    "toml>=0.10.2"
+]
