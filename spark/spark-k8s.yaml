@@ -1,0 +1,177 @@
+# ==============================================================================
+# FinLake — Kubernetes manifests for PySpark
+#
+# Includes:
+#   1. ServiceAccount + RBAC  (Spark needs to create executor Pods on k8s)
+#   2. ConfigMap              (Spark/job configuration)
+#   3. Job                    (one-shot batch job execution)
+#   4. Service                (expose Spark UI & driver port)
+# ==============================================================================
+
+# ── 1. ServiceAccount ─────────────────────────────────────────────────────────
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-sa
+  namespace: default
+  labels:
+    app: finlake-spark
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spark-cluster-role
+  labels:
+    app: finlake-spark
+rules:
+  # Spark needs to list/watch/create/delete Pods for executors
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  # Spark needs to create Services for the executor pods
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete"]
+  # ConfigMaps for Spark configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spark-cluster-role-binding
+  labels:
+    app: finlake-spark
+subjects:
+  - kind: ServiceAccount
+    name: spark-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: spark-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+
+# ── 2. ConfigMap — tune Spark settings here ───────────────────────────────────
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finlake-spark-config
+  namespace: default
+  labels:
+    app: finlake-spark
+data:
+  # Job to run (must exist inside the image at this path)
+  SPARK_JOB_FILE: "/opt/spark-jobs/sample_job.py"
+
+  # Use the k8s master. The cluster's API server URL is auto-detected via
+  # the in-cluster config when running in a Pod; override if needed.
+  # For local testing with "local[*]":
+  SPARK_MASTER: "local[*]"
+
+  # App label
+  SPARK_APP_NAME: "finlake-spark-job"
+
+  # Resource sizing
+  SPARK_DRIVER_MEMORY: "1g"
+  SPARK_EXECUTOR_MEMORY: "1g"
+  SPARK_EXECUTOR_CORES: "1"
+
+  # Extra spark-submit packages/flags (space-separated)
+  # Example with Delta + Kafka connector:
+  # SPARK_EXTRA_ARGS: "--packages io.delta:delta-spark_2.12:3.3.1,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.6"
+  SPARK_EXTRA_ARGS: ""
+
+# ── 3. Kubernetes Job ─────────────────────────────────────────────────────────
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: finlake-spark-job
+  namespace: default
+  labels:
+    app: finlake-spark
+spec:
+  # Retry up to 3 times on failure
+  backoffLimit: 3
+
+  # Clean up the Job (and its Pods) automatically after 10 minutes
+  ttlSecondsAfterFinished: 600
+
+  template:
+    metadata:
+      labels:
+        app: finlake-spark
+        # Spark uses this label to identify the driver pod
+        spark-role: driver
+    spec:
+      serviceAccountName: spark-sa
+      restartPolicy: Never
+
+      containers:
+        - name: spark-driver
+          # Replace with your actual registry/image tag
+          image: ghcr.io/saivarshithh/finlake-spark:latest
+          imagePullPolicy: Always
+
+          envFrom:
+            - configMapRef:
+                name: finlake-spark-config
+
+          # Optionally override individual env vars here:
+          # env:
+          #   - name: SPARK_JOB_FILE
+          #     value: "/opt/spark/jobs/my_custom_job.py"
+
+          ports:
+            # Spark UI
+            - containerPort: 4040
+              name: spark-ui
+            # Spark driver port (for k8s executor callbacks)
+            - containerPort: 7077
+              name: spark-driver
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1.5Gi"
+            limits:
+              cpu: "2"
+              memory: "3Gi"
+
+          # Liveness: the job is "live" as long as the JVM is running
+          # (disabled for batch jobs — comment back in for long-running drivers)
+          # livenessProbe: ...
+
+      # Pull credentials for GHCR if the image is private
+      # imagePullSecrets:
+      #   - name: ghcr-secret
+
+# ── 4. Service — expose Spark UI & driver port ────────────────────────────────
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finlake-spark-ui
+  namespace: default
+  labels:
+    app: finlake-spark
+spec:
+  selector:
+    app: finlake-spark
+    spark-role: driver
+  ports:
+    - name: spark-ui
+      port: 4040
+      targetPort: 4040
+    - name: spark-driver
+      port: 7077
+      targetPort: 7077
+  # Use NodePort so you can reach the Spark UI from your machine:
+  #   http://<node-ip>:<nodePort>
+  # Switch to ClusterIP if you don't need external access.
+  type: NodePort

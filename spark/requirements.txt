@@ -1,0 +1,20 @@
+# FinLake — PySpark job dependencies
+# pip install pyspark bundles spark-submit + all JARs inside the package.
+
+# Core — pin to match Spark version in the image
+pyspark==3.5.6
+
+# Delta Lake (lakehouse storage layer)
+delta-spark==3.3.1
+
+# Kafka Python client (for streaming jobs)
+kafka-python==2.0.2
+
+# Utilities
+python-dotenv==1.1.1
+
+# ── Add extra packages below as your jobs need them ──────────────────────────
+# great-expectations==1.5.1   # ~200 MB — add back when needed for DQ jobs
+# boto3                        # AWS S3
+# google-cloud-storage         # GCS
+# azure-storage-blob           # Azure ADLS / Gen2
