@@ -19,6 +19,17 @@ ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ENV PYSPARK_PYTHON=python3
 
 # ------------------------------------------------------------------------------
+# Java 21 + Spark 3.5.x module-access fix
+# Spark reflectively touches sun.nio.ch.DirectBuffer and other JDK internals
+# that JPMS blocks by default from Java 9+. spark-submit's own command
+# builder injects these automatically for the driver, but code paths that
+# invoke spark-class/java directly (e.g. our executor branch in entrypoint.sh)
+# do NOT get them for free. Setting JDK_JAVA_OPTIONS applies it to every JVM
+# launch in this image, driver and executor alike, regardless of code path.
+# ------------------------------------------------------------------------------
+ENV JDK_JAVA_OPTIONS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED"
+
+# ------------------------------------------------------------------------------
 # Install Python dependencies
 # ------------------------------------------------------------------------------
 COPY spark/requirements.txt /tmp/requirements.txt
