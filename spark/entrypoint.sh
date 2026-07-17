@@ -32,6 +32,15 @@ SPARK_EXTRA_ARGS="${SPARK_EXTRA_ARGS:-}"
 log()  { echo "[entrypoint] $(date -u '+%Y-%m-%dT%H:%M:%SZ') | $*"; }
 die()  { log "ERROR: $*" >&2; exit 1; }
 
+# ── Spark Executor / Internal Command Bypass ──────────────────────────────────
+# When Spark launches executor pods, it invokes this entrypoint with the command
+# '/opt/spark/bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend ...'
+# We must execute this command directly instead of running spark-submit again.
+if [[ "$#" -gt 0 && ( "$1" == *"/spark-class" || "$1" == *"/spark-submit" || "$1" == "executor" ) ]]; then
+    log "Executing bypassed Spark command: $@"
+    exec "$@"
+fi
+
 # ── Validate job file exists ──────────────────────────────────────────────────
 [[ -f "${SPARK_JOB_FILE}" ]] || die "Job file not found: ${SPARK_JOB_FILE}"
 

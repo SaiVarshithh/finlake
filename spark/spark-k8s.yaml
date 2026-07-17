@@ -89,8 +89,6 @@ data:
     --conf spark.kubernetes.container.image=ghcr.io/saivarshithh/finlake-spark:latest
     --conf spark.kubernetes.namespace=finlake
     --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark-sa
-    --conf spark.kubernetes.driver.label.spark-role=driver
-    --conf spark.kubernetes.executor.label.spark-role=executor
 
 # ── 3. Kubernetes Job ─────────────────────────────────────────────────────────
 ---
