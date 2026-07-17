@@ -90,7 +90,7 @@ data:
   # Only pure static confs and package flags belong here.
   SPARK_EXTRA_ARGS: >
     --conf spark.executor.instances=2
-    --conf spark.kubernetes.container.image=ghcr.io/saivarshithh/finlake-spark:ef5dd6575d81a9a409dbb1154e8ebad4c9cc6450
+    --conf spark.kubernetes.container.image=ghcr.io/saivarshithh/finlake-spark:6eb48d90f8b7502bb3c2e7856fc4633fbb35f368
     --conf spark.kubernetes.namespace=finlake
     --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark-sa
 
@@ -123,7 +123,7 @@ spec:
       containers:
         - name: spark-driver
           # Replace with your actual registry/image tag
-          image: ghcr.io/saivarshithh/finlake-spark:ef5dd6575d81a9a409dbb1154e8ebad4c9cc6450
+          image: ghcr.io/saivarshithh/finlake-spark:6eb48d90f8b7502bb3c2e7856fc4633fbb35f368
           imagePullPolicy: Always
 
           envFrom:
