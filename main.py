@@ -1,6 +1,9 @@
-def main():
-    print("Hello from finlake!")
+from flask import Flask
 
+app = Flask(__name__)
 
-if __name__ == "__main__":
-    main()
+@app.route("/")
+def hello():
+    return "Hello Kubernetes"
+
+app.run(host="0.0.0.0", port=5000)
