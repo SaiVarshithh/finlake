@@ -48,6 +48,8 @@ log "  Executor cores : ${SPARK_EXECUTOR_CORES}"
 log "=========================================================="
 
 # ── Build spark-submit command ────────────────────────────────────────────────
+# MY_POD_IP is injected as a real env var by the k8s Downward API (status.podIP).
+# Expanding it here (inside the bash array) is the only safe way — no eval tricks.
 SUBMIT_CMD=(
     spark-submit
     --master          "${SPARK_MASTER}"
@@ -55,16 +57,15 @@ SUBMIT_CMD=(
     --driver-memory   "${SPARK_DRIVER_MEMORY}"
     --executor-memory "${SPARK_EXECUTOR_MEMORY}"
     --executor-cores  "${SPARK_EXECUTOR_CORES}"
-    --conf "spark.ui.enabled=true"
-    --conf "spark.ui.port=4040"
-    # When running on k8s, the driver needs to advertise its own address so
-    # executors can call back to it.  HOSTNAME is automatically set by k8s.
-    --conf "spark.driver.host=${HOSTNAME:-localhost}"
+    --conf "spark.ui.enabled=false"
+    --conf "spark.driver.port=7077"
+    # MY_POD_IP → real pod IP (Downward API). Falls back to HOSTNAME for local[*] mode.
+    --conf "spark.driver.host=${MY_POD_IP:-${HOSTNAME:-localhost}}"
 )
 
-# Append any extra args supplied at runtime
+# Append any extra k8s / package flags from the ConfigMap.
+# SPARK_EXTRA_ARGS is a plain space-separated list — word-split is intentional.
 if [[ -n "${SPARK_EXTRA_ARGS}" ]]; then
-    # Word-split intentional here — SPARK_EXTRA_ARGS is a space-separated list
     # shellcheck disable=SC2086
     SUBMIT_CMD+=(${SPARK_EXTRA_ARGS})
 fi
