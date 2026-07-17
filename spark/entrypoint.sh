@@ -34,19 +34,20 @@ die()  { log "ERROR: $*" >&2; exit 1; }
 
 # ── Spark Executor / Internal Command Bypass ──────────────────────────────────
 # In k8s native mode, Spark starts executor pods with a single arg "executor"
-# and injects all connection details as environment variables:
-#   SPARK_EXECUTOR_DRIVER_URL, SPARK_EXECUTOR_ID, SPARK_EXECUTOR_HOSTNAME,
-#   SPARK_EXECUTOR_BIND_ADDRESS, SPARK_APPLICATION_ID, SPARK_RESOURCE_PROFILE_ID
-# We must read these env vars and pass them explicitly to CoarseGrainedExecutorBackend.
+# and injects connection details as environment variables. These are the ACTUAL
+# names Spark's KubernetesExecutorBuilder sets (verified against Spark 3.5.x
+# source, resource-managers/kubernetes/docker/src/main/dockerfiles/spark/entrypoint.sh):
+#   SPARK_DRIVER_URL, SPARK_EXECUTOR_ID, SPARK_EXECUTOR_CORES,
+#   SPARK_APPLICATION_ID, SPARK_EXECUTOR_POD_IP, SPARK_RESOURCE_PROFILE_ID (3.4+)
+# There is no SPARK_EXECUTOR_DRIVER_URL / SPARK_EXECUTOR_HOSTNAME / SPARK_EXECUTOR_BIND_ADDRESS.
 if [[ "$#" -gt 0 ]]; then
     if [[ "$1" == "executor" ]]; then
         log "Running Spark executor backend (reading Spark-injected env vars)..."
         exec /opt/spark/bin/spark-class \
             org.apache.spark.executor.CoarseGrainedExecutorBackend \
-            --driver-url        "${SPARK_EXECUTOR_DRIVER_URL}" \
+            --driver-url        "${SPARK_DRIVER_URL}" \
             --executor-id       "${SPARK_EXECUTOR_ID}" \
-            --bind-address      "${SPARK_EXECUTOR_BIND_ADDRESS:-}" \
-            --hostname          "${SPARK_EXECUTOR_HOSTNAME}" \
+            --hostname          "${SPARK_EXECUTOR_POD_IP}" \
             --cores             "${SPARK_EXECUTOR_CORES:-1}" \
             --app-id            "${SPARK_APPLICATION_ID}" \
             --resourceProfileId "${SPARK_RESOURCE_PROFILE_ID:-0}"
