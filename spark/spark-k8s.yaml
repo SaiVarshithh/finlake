@@ -29,15 +29,19 @@ rules:
   # Spark needs to list/watch/create/delete Pods for executors
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
-    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+    verbs: ["get", "list", "watch", "create", "delete", "deletecollection", "patch"]
   # Spark needs to create Services for the executor pods
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "list", "create", "delete"]
+    verbs: ["get", "list", "create", "delete", "deletecollection"]
   # ConfigMaps for Spark configuration
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list", "create", "delete"]
+    verbs: ["get", "list", "create", "delete", "deletecollection"]
+  # PersistentVolumeClaims if jobs use dynamically provisioned storage
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "create", "delete", "deletecollection"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -86,7 +90,7 @@ data:
   # Only pure static confs and package flags belong here.
   SPARK_EXTRA_ARGS: >
     --conf spark.executor.instances=2
-    --conf spark.kubernetes.container.image=ghcr.io/saivarshithh/finlake-spark:latest
+    --conf spark.kubernetes.container.image=ghcr.io/saivarshithh/finlake-spark:ef5dd6575d81a9a409dbb1154e8ebad4c9cc6450
     --conf spark.kubernetes.namespace=finlake
     --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark-sa
 
@@ -119,8 +123,8 @@ spec:
       containers:
         - name: spark-driver
           # Replace with your actual registry/image tag
-          image: ghcr.io/saivarshithh/finlake-spark:latest
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/saivarshithh/finlake-spark:ef5dd6575d81a9a409dbb1154e8ebad4c9cc6450
+          imagePullPolicy: Always
 
           envFrom:
             - configMapRef:
