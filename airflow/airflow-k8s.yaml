@@ -1,0 +1,136 @@
+# ==============================================================================
+# FinLake — Airflow on Minikube (starter setup)
+#
+# Deliberately minimal — one Deployment, one Service. Runs `airflow standalone`
+# (webserver + scheduler + triggerer in a single process/container, SQLite
+# metadata DB). This is enough to prove out: long-lived pod, DAG visible in
+# the UI, manual trigger works.
+#
+# Storage is an emptyDir — SQLite/db and logs are lost on pod restart. That's
+# an intentional trade for a starter setup, not an oversight: don't add a
+# PersistentVolumeClaim until you've decided whether this stays on
+# SequentialExecutor+SQLite or moves to LocalExecutor+Postgres for the cloud
+# deployment. Bolting a PVC onto SQLite now just adds a moving part you'll
+# rip out anyway.
+#
+# When you move to a real cloud cluster, the things to revisit (not before):
+#   - LocalExecutor or KubernetesExecutor + a real Postgres (StatefulSet or
+#     managed DB), so DAG history survives pod restarts
+#   - PVC or GitSync sidecar for /opt/airflow/dags instead of baking DAGs
+#     into the image, if you want dag changes without a rebuild
+#   - A real webserver secret key / fernet key via Secret, not defaults
+#
+# Namespace: finlake (shared with the Spark deployment)
+#
+# Usage on Minikube:
+#   minikube start --cpus=4 --memory=6g   # if not already running
+#   kubectl apply -f airflow-k8s.yaml
+#   kubectl get pods -n finlake -w
+#
+# Access the UI:
+#   minikube service finlake-airflow -n finlake
+#   # OR: kubectl port-forward svc/finlake-airflow 8080:8080 -n finlake
+#
+# Get the auto-generated admin password (airflow standalone creates one):
+#   kubectl exec -it deploy/finlake-airflow -n finlake -- \
+#     cat /opt/airflow/standalone_admin_password.txt
+#
+# Trigger the sample DAG manually (from CLI, in addition to the UI button):
+#   kubectl exec -it deploy/finlake-airflow -n finlake -- \
+#     airflow dags trigger finlake_sample_dag
+# ==============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: finlake
+  labels:
+    app: finlake
+
+# ── Deployment — long-lasting pod running webserver+scheduler+triggerer ───────
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finlake-airflow
+  namespace: finlake
+  labels:
+    app: finlake-airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: finlake-airflow
+  strategy:
+    type: Recreate   # SQLite + emptyDir: never run two pods at once
+  template:
+    metadata:
+      labels:
+        app: finlake-airflow
+    spec:
+      containers:
+        - name: airflow
+          # Replace <SHA> with the commit SHA tag pushed by docker.yml after
+          # each build — same pattern as the Spark image in spark-k8s.yaml.
+          image: ghcr.io/saivarshithh/finlake-airflow:<SHA>
+          imagePullPolicy: Always
+          command: ["airflow", "standalone"]
+          env:
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "false"
+            - name: AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION
+              value: "true"
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: "SequentialExecutor"
+          ports:
+            - containerPort: 8080
+              name: http
+          # No volume mounts on purpose: DAGs are baked into the image at
+          # /opt/airflow/dags (see airflow/Dockerfile). Mounting anything at
+          # /opt/airflow here would shadow that directory. The container's
+          # own writable layer holds the SQLite db/logs for the pod's
+          # lifetime, which is fine per the storage note above.
+          resources:
+            requests:
+              cpu: "300m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 5
+      # Uncomment if finlake-airflow image is private on GHCR:
+      # imagePullSecrets:
+      #   - name: ghcr-secret
+
+# ── Service — expose the webserver ─────────────────────────────────────────────
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finlake-airflow
+  namespace: finlake
+  labels:
+    app: finlake-airflow
+spec:
+  selector:
+    app: finlake-airflow
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080   # http://<minikube-ip>:30080
+  type: NodePort
