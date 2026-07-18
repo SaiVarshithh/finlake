@@ -73,7 +73,7 @@ spec:
         - name: airflow
           # Replace <SHA> with the commit SHA tag pushed by docker.yml after
           # each build — same pattern as the Spark image in spark-k8s.yaml.
-          image: ghcr.io/saivarshithh/finlake-airflow:<SHA>
+          image: ghcr.io/saivarshithh/finlake-airflow:latest
           imagePullPolicy: Always
           command: ["airflow", "standalone"]
           env:
