@@ -1,0 +1,43 @@
+# postgres/postgres-k8s.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: finlake
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finlake-postgres
+  namespace: finlake
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: finlake-postgres } }
+  template:
+    metadata: { labels: { app: finlake-postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - { name: POSTGRES_USER, value: "nessie" }
+            - { name: POSTGRES_PASSWORD, value: "password" }
+            - { name: POSTGRES_DB, value: "nessie" }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: postgres-pvc }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: finlake-postgres, namespace: finlake }
+spec:
+  selector: { app: finlake-postgres }
+  type: NodePort
+  ports: [{ port: 5432, targetPort: 5432, nodePort: 30432 }]
