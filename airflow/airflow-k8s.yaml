@@ -67,7 +67,7 @@ metadata:
     app: finlake-airflow
 rules:
   - apiGroups: ["batch"]
-    resources: ["jobs"]
+    resources: ["jobs", "jobs/status"]
     verbs: ["create", "get", "list", "watch", "delete"]
   - apiGroups: [""]
     resources: ["pods", "pods/log", "events"]

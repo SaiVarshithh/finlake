@@ -89,7 +89,6 @@ data:
   # in entrypoint.sh using ${MY_POD_IP} (injected by Downward API).
   # Only pure static confs and package flags belong here.
   SPARK_EXTRA_ARGS: >
-    --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0,software.amazon.awssdk:bundle:2.20.131,software.amazon.awssdk:url-connection-client:2.20.131
     --conf spark.executor.instances=2
     --conf spark.kubernetes.container.image=ghcr.io/saivarshithh/finlake-spark:latest
     --conf spark.kubernetes.namespace=finlake

@@ -25,18 +25,8 @@ NAMESPACE = os.getenv("FINLAKE_K8S_NAMESPACE", "finlake")
 SPARK_IMAGE = os.getenv("FINLAKE_SPARK_IMAGE", "ghcr.io/saivarshithh/finlake-spark:latest")
 MINIO_CLIENT_IMAGE = os.getenv("FINLAKE_MINIO_CLIENT_IMAGE", "quay.io/minio/mc:latest")
 
-SPARK_PACKAGES = ",".join(
-    [
-        "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0",
-        "software.amazon.awssdk:bundle:2.20.131",
-        "software.amazon.awssdk:url-connection-client:2.20.131",
-    ]
-)
-
 SPARK_EXTRA_ARGS = " ".join(
     [
-        "--packages",
-        SPARK_PACKAGES,
         "--conf",
         "spark.executor.instances=2",
         "--conf",
