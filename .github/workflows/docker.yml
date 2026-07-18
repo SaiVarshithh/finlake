@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Build and Push Docker Images
 
 on:
   push:
@@ -12,8 +12,15 @@ permissions:
 
 jobs:
   build-and-push:
-    name: Build & Push finlake-spark
+    name: Build & Push ${{ matrix.image }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: finlake-spark
+            context: spark
+          - image: finlake-airflow
+            context: airflow
 
     steps:
       - name: Checkout source
@@ -30,14 +37,19 @@ jobs:
         id: meta
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "image=ghcr.io/$OWNER/finlake-spark" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$OWNER/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
 
+      # Each image is built with its OWN folder as the build context (not
+      # repo root) — spark/Dockerfile only sees spark/, airflow/Dockerfile
+      # only sees airflow/. That's the whole point of separating them:
+      # neither image can accidentally COPY the other's files, and each
+      # Dockerfile's COPY paths are self-contained relative to its folder.
       - name: Build image
         run: |
           docker build \
             -t ${{ steps.meta.outputs.image }}:${{ github.sha }} \
             -t ${{ steps.meta.outputs.image }}:latest \
-            .
+            ${{ matrix.context }}
 
       - name: Push image
         run: |

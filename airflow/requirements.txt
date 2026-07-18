@@ -1,0 +1,20 @@
+# FinLake — Airflow extra dependencies
+#
+# Installed in airflow/Dockerfile with `--constraint` against Airflow 2.9.3's
+# own constraints file. That constraints file pins compatible versions of
+# Airflow's huge transitive dependency graph (SQLAlchemy, Flask, etc.) — do
+# NOT drop the --constraint flag when adding packages here, or a routine
+# `pip install` can silently upgrade something Airflow core depends on and
+# break the webserver in a way that has nothing to do with the package you
+# actually added.
+#
+# Left version-unpinned on purpose: the 2.9.3 constraints file already fixes
+# a compatible version for anything it knows about, and cncf-kubernetes'
+# newest releases require Airflow 2.11+ — pinning a specific number here
+# risks pinning past what 2.9.3 can actually use.
+
+# Kubernetes provider — KubernetesPodOperator / talking to the k8s API from
+# DAGs (e.g. to trigger and watch the finlake-spark Job). Not exercised by
+# sample_dag.py yet, but this is the natural next dependency once you wire
+# a real Spark-triggering task in.
+apache-airflow-providers-cncf-kubernetes
