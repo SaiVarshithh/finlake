@@ -25,8 +25,9 @@ Thumbs.db
 
 
 *.ini
-uv.lock
 .env
 .venv
 __pycache__/
 *.pyc
+
+local/

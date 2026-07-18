@@ -1,0 +1,47 @@
+# Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: finlake
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: finlake
+
+  template:
+    metadata:
+      labels:
+        app: finlake
+
+    spec:
+      containers:
+      - name: finlake
+
+        image: ghcr.io/saivarshithh/finlake:latest
+
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 5000
+
+--- # Service
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: finlake-service
+
+spec:
+  selector:
+    app: finlake
+
+  ports:
+  - port: 80
+    targetPort: 5000
+
+  type: NodePort
