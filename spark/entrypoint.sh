@@ -84,9 +84,17 @@ SUBMIT_CMD=(
     --executor-cores  "${SPARK_EXECUTOR_CORES}"
     --conf "spark.ui.enabled=false"
     --conf "spark.driver.port=7077"
+    --conf "spark.driver.bindAddress=0.0.0.0"
     # MY_POD_IP → real pod IP (Downward API). Falls back to HOSTNAME for local[*] mode.
     --conf "spark.driver.host=${MY_POD_IP:-${HOSTNAME:-localhost}}"
 )
+
+if [[ "${SPARK_MASTER}" == k8s://* ]]; then
+    SUBMIT_CMD+=(
+        --conf "spark.submit.deployMode=client"
+        --conf "spark.kubernetes.driver.pod.name=${HOSTNAME:-finlake-spark-driver}"
+    )
+fi
 
 # Append any extra k8s / package flags from the ConfigMap.
 # SPARK_EXTRA_ARGS is a plain space-separated list — word-split is intentional.

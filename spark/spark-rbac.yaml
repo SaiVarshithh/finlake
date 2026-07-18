@@ -1,0 +1,54 @@
+# Spark permissions required by Airflow-triggered Kubernetes Spark jobs.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: finlake
+  labels:
+    app: finlake
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-sa
+  namespace: finlake
+  labels:
+    app: finlake-spark
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spark-cluster-role
+  labels:
+    app: finlake-spark
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete", "deletecollection", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "create", "delete", "deletecollection"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spark-cluster-role-binding
+  labels:
+    app: finlake-spark
+subjects:
+  - kind: ServiceAccount
+    name: spark-sa
+    namespace: finlake
+roleRef:
+  kind: ClusterRole
+  name: spark-cluster-role
+  apiGroup: rbac.authorization.k8s.io
