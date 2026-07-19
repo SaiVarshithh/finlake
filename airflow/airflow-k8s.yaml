@@ -48,6 +48,48 @@ metadata:
   labels:
     app: finlake
 
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: finlake-airflow-sa
+  namespace: finlake
+  labels:
+    app: finlake-airflow
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: finlake-airflow-spark-orchestrator
+  namespace: finlake
+  labels:
+    app: finlake-airflow
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs", "jobs/status"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: finlake-airflow-spark-orchestrator
+  namespace: finlake
+  labels:
+    app: finlake-airflow
+subjects:
+  - kind: ServiceAccount
+    name: finlake-airflow-sa
+    namespace: finlake
+roleRef:
+  kind: Role
+  name: finlake-airflow-spark-orchestrator
+  apiGroup: rbac.authorization.k8s.io
+
 # ── Deployment — long-lasting pod running webserver+scheduler+triggerer ───────
 ---
 apiVersion: apps/v1
@@ -69,11 +111,13 @@ spec:
       labels:
         app: finlake-airflow
     spec:
+      serviceAccountName: finlake-airflow-sa
+      automountServiceAccountToken: true
       containers:
         - name: airflow
           # Replace <SHA> with the commit SHA tag pushed by docker.yml after
           # each build — same pattern as the Spark image in spark-k8s.yaml.
-          image: ghcr.io/saivarshithh/finlake-airflow:<SHA>
+          image: ghcr.io/saivarshithh/finlake-airflow:latest
           imagePullPolicy: Always
           command: ["airflow", "standalone"]
           env:

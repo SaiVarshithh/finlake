@@ -41,6 +41,11 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 # ------------------------------------------------------------------------------
 RUN ln -s "$(python -c 'import pyspark, os; print(os.path.dirname(pyspark.__file__))')" /opt/spark
 
+# Pre-download required jars to avoid internet dependencies and download failures in the k8s cluster
+ADD --chmod=644 https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/1.5.0/iceberg-spark-runtime-3.5_2.12-1.5.0.jar /opt/spark/jars/
+ADD --chmod=644 https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.20.131/bundle-2.20.131.jar /opt/spark/jars/
+ADD --chmod=644 https://repo1.maven.org/maven2/software/amazon/awssdk/url-connection-client/2.20.131/url-connection-client-2.20.131.jar /opt/spark/jars/
+
 ENV SPARK_HOME=/opt/spark
 ENV PATH="${SPARK_HOME}/bin:${SPARK_HOME}/sbin:${PATH}"
 
@@ -48,8 +53,8 @@ ENV PATH="${SPARK_HOME}/bin:${SPARK_HOME}/sbin:${PATH}"
 # Runtime Defaults
 # ------------------------------------------------------------------------------
 ENV SPARK_MASTER="local[*]"
-ENV SPARK_APP_NAME="finlake-spark-job"
-ENV SPARK_JOB_FILE="/opt/spark-jobs/sample_job.py"
+ENV SPARK_APP_NAME="finlake-iceberg-transactions"
+ENV SPARK_JOB_FILE="/opt/spark-jobs/iceberg_transactions_job.py"
 ENV SPARK_DRIVER_MEMORY="1g"
 ENV SPARK_EXECUTOR_MEMORY="1g"
 ENV SPARK_EXECUTOR_CORES="1"

@@ -70,14 +70,14 @@ metadata:
     app: finlake-spark
 data:
   # Job to run (must exist inside the image at this path)
-  SPARK_JOB_FILE: "/opt/spark-jobs/sample_job.py"
+  SPARK_JOB_FILE: "/opt/spark-jobs/iceberg_transactions_job.py"
 
   # kubernetes.default.svc is the stable in-cluster DNS name for the API server.
   # Spark uses it to talk to the k8s API and create executor pods.
   SPARK_MASTER: "k8s://https://kubernetes.default.svc:443"
 
   # App label (also used as the driver pod name prefix by Spark)
-  SPARK_APP_NAME: "finlake-spark-job"
+  SPARK_APP_NAME: "finlake-iceberg-transactions"
 
   # Resource sizing
   SPARK_DRIVER_MEMORY: "1g"
@@ -90,9 +90,26 @@ data:
   # Only pure static confs and package flags belong here.
   SPARK_EXTRA_ARGS: >
     --conf spark.executor.instances=2
-    --conf spark.kubernetes.container.image=ghcr.io/saivarshithh/finlake-spark:aec0f0f62a060894dc25715cb56480bed72a215e
+    --conf spark.kubernetes.container.image=ghcr.io/saivarshithh/finlake-spark:latest
     --conf spark.kubernetes.namespace=finlake
     --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark-sa
+    --conf spark.kubernetes.executor.label.app=finlake-spark
+    --conf spark.kubernetes.executor.label.spark-pipeline=iceberg-transactions
+    --conf spark.kubernetes.executorEnv.AWS_ACCESS_KEY_ID=minioadmin
+    --conf spark.kubernetes.executorEnv.AWS_SECRET_ACCESS_KEY=minioadmin
+    --conf spark.kubernetes.executorEnv.AWS_REGION=us-east-1
+    --conf spark.kubernetes.executorEnv.AWS_DEFAULT_REGION=us-east-1
+    --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+    --conf spark.sql.catalog.nessie=org.apache.iceberg.spark.SparkCatalog
+    --conf spark.sql.catalog.nessie.catalog-impl=org.apache.iceberg.nessie.NessieCatalog
+    --conf spark.sql.catalog.nessie.uri=http://finlake-nessie:19120/api/v1
+    --conf spark.sql.catalog.nessie.ref=main
+    --conf spark.sql.catalog.nessie.authentication.type=NONE
+    --conf spark.sql.catalog.nessie.warehouse=s3://finlake-warehouse/warehouse
+    --conf spark.sql.catalog.nessie.io-impl=org.apache.iceberg.aws.s3.S3FileIO
+    --conf spark.sql.catalog.nessie.s3.endpoint=http://finlake-minio:9000
+    --conf spark.sql.catalog.nessie.s3.path-style-access=true
+    --conf spark.sql.catalog.nessie.cache-enabled=false
 
 # ── 3. Kubernetes Job ─────────────────────────────────────────────────────────
 ---
@@ -123,7 +140,7 @@ spec:
       containers:
         - name: spark-driver
           # Replace with your actual registry/image tag
-          image: ghcr.io/saivarshithh/finlake-spark:aec0f0f62a060894dc25715cb56480bed72a215e
+          image: ghcr.io/saivarshithh/finlake-spark:latest
           imagePullPolicy: Always
 
           envFrom:
@@ -140,6 +157,22 @@ spec:
             # Override individual job params here without touching the ConfigMap:
             # - name: SPARK_JOB_FILE
             #   value: "/opt/spark-jobs/my_other_job.py"
+            - name: AWS_ACCESS_KEY_ID
+              value: "minioadmin"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "minioadmin"
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+            - name: ICEBERG_CATALOG
+              value: "nessie"
+            - name: ICEBERG_NAMESPACE
+              value: "finlake_bronze"
+            - name: ICEBERG_TABLE
+              value: "transactions_test"
+            - name: TEST_RECORD_COUNT
+              value: "100000"
 
           ports:
             - containerPort: 7077
