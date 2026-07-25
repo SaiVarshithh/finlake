@@ -36,11 +36,6 @@ TABLE_IDENTIFIER = f"{CATALOG}.{NAMESPACE}.{TABLE}"
 
 
 def build_spark() -> SparkSession:
-    # AWS credentials and region are injected as JVM system properties so that
-    # the AWS SDK v2 SystemSettingsRegionProvider finds them via
-    # System.getProperty("aws.region") — the most reliable path when running
-    # on non-EC2 infrastructure (e.g. AKS) where EC2 metadata is unavailable.
-    aws_region_jvm = f"-Daws.region={os.getenv('AWS_REGION', 'us-east-1')}"
     builder = (
         SparkSession.builder.appName("finlake-iceberg-transactions-ingest")
         .config(
@@ -75,13 +70,29 @@ def build_spark() -> SparkSession:
         )
         .config(f"spark.sql.catalog.{CATALOG}.s3.path-style-access", "true")
         .config(f"spark.sql.catalog.{CATALOG}.cache-enabled", "false")
-        # Inject AWS region as a JVM system property for both driver and executor
-        # so the AWS SDK resolves it via SystemSettingsRegionProvider without
-        # touching EC2 metadata.
-        .config("spark.driver.extraJavaOptions", aws_region_jvm)
-        .config("spark.executor.extraJavaOptions", aws_region_jvm)
+        # ── Iceberg 1.5.0 AWS config (from AwsClientProperties source) ──────────
+        # "client.region" is read by AwsClientProperties and applied via
+        # applyClientRegionConfiguration → S3Client.builder().region(Region.of(...))
+        # This directly sets the region on the builder, bypassing
+        # DefaultAwsRegionProviderChain (which tries EC2 metadata and fails on k8s).
+        .config(
+            f"spark.sql.catalog.{CATALOG}.client.region",
+            os.getenv("AWS_REGION", "us-east-1"),
+        )
+        # "s3.access-key-id" / "s3.secret-access-key" are read by S3FileIOProperties
+        # and applied via applyCredentialConfigurations → StaticCredentialsProvider.
+        # Without these, DefaultCredentialsProvider also fails on non-AWS k8s.
+        .config(
+            f"spark.sql.catalog.{CATALOG}.s3.access-key-id",
+            os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
+        )
+        .config(
+            f"spark.sql.catalog.{CATALOG}.s3.secret-access-key",
+            os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        )
     )
     return builder.getOrCreate()
+
 
 
 def array_lookup(values: list[str], index_column: str = "record_id") -> str:

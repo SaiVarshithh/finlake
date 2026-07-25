@@ -25,16 +25,12 @@ NAMESPACE = os.getenv("FINLAKE_K8S_NAMESPACE", "finlake")
 SPARK_IMAGE = os.getenv("FINLAKE_SPARK_IMAGE", "ghcr.io/saivarshithh/finlake-spark:latest")
 MINIO_CLIENT_IMAGE = os.getenv("FINLAKE_MINIO_CLIENT_IMAGE", "quay.io/minio/mc:latest")
 
-# -Daws.region is injected into both the driver and executor JVMs via
-# extraJavaOptions. This is the most reliable way to supply the region to
-# the AWS SDK v2 SystemSettingsRegionProvider, which checks
-# System.getProperty("aws.region") directly — bypassing the
-# DefaultAwsRegionProviderChain that tries EC2 metadata (and fails on AKS).
-#
-# IMPORTANT: keep each extraJavaOptions value as a SINGLE word with no spaces.
-# SPARK_EXTRA_ARGS is word-split by the entrypoint shell, so any space inside
-# a --conf value would break that conf into multiple tokens.
-_AWS_REGION_JVM = "-Daws.region=us-east-1"
+# Iceberg 1.5.0 reads region via AwsClientProperties.applyClientRegionConfiguration,
+# which is triggered by the catalog property "client.region".
+# Credentials are read by S3FileIOProperties via "s3.access-key-id" and
+# "s3.secret-access-key". These are applied directly to the S3ClientBuilder
+# in DefaultAwsClientFactory.s3(), bypassing the DefaultAwsRegionProviderChain
+# and DefaultCredentialsProvider entirely — no env vars or JVM flags needed.
 
 SPARK_EXTRA_ARGS = " ".join(
     [
@@ -50,22 +46,6 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.kubernetes.executor.label.app=finlake-spark",
         "--conf",
         "spark.kubernetes.executor.label.spark-pipeline=iceberg-transactions",
-        # Belt-and-suspenders: set env vars on executor pods too.
-        "--conf",
-        "spark.kubernetes.executorEnv.AWS_ACCESS_KEY_ID=minioadmin",
-        "--conf",
-        "spark.kubernetes.executorEnv.AWS_SECRET_ACCESS_KEY=minioadmin",
-        "--conf",
-        "spark.kubernetes.executorEnv.AWS_REGION=us-east-1",
-        "--conf",
-        "spark.kubernetes.executorEnv.AWS_DEFAULT_REGION=us-east-1",
-        # Inject region as a JVM system property — the only path guaranteed to
-        # reach SystemSettingsRegionProvider before the EC2 metadata fallback.
-        # Single -D flag per conf to avoid word-split corruption in entrypoint.sh.
-        "--conf",
-        f"spark.driver.extraJavaOptions={_AWS_REGION_JVM}",
-        "--conf",
-        f"spark.executor.extraJavaOptions={_AWS_REGION_JVM}",
         "--conf",
         "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         "--conf",
@@ -88,6 +68,20 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.sql.catalog.nessie.s3.path-style-access=true",
         "--conf",
         "spark.sql.catalog.nessie.cache-enabled=false",
+        # ── The actual fix ─────────────────────────────────────────────────────
+        # "client.region" is read by Iceberg's AwsClientProperties and applied
+        # via applyClientRegionConfiguration → S3Client.builder().region(...).
+        # This is the ONLY path that bypasses DefaultAwsRegionProviderChain in
+        # Iceberg 1.5.0's DefaultAwsClientFactory.
+        "--conf",
+        "spark.sql.catalog.nessie.client.region=us-east-1",
+        # "s3.access-key-id" / "s3.secret-access-key" are read by S3FileIOProperties
+        # and applied via applyCredentialConfigurations → StaticCredentialsProvider.
+        # Without these, DefaultCredentialsProvider also fails on non-AWS k8s.
+        "--conf",
+        "spark.sql.catalog.nessie.s3.access-key-id=minioadmin",
+        "--conf",
+        "spark.sql.catalog.nessie.s3.secret-access-key=minioadmin",
     ]
 )
 
