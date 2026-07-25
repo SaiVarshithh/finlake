@@ -137,8 +137,8 @@ spec:
           # lifetime, which is fine per the storage note above.
           resources:
             requests:
-              cpu: "300m"
-              memory: "1Gi"
+              cpu: "200m"
+              memory: "512Mi"
             limits:
               cpu: "1"
               memory: "2Gi"

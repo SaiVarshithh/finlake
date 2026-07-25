@@ -70,8 +70,29 @@ def build_spark() -> SparkSession:
         )
         .config(f"spark.sql.catalog.{CATALOG}.s3.path-style-access", "true")
         .config(f"spark.sql.catalog.{CATALOG}.cache-enabled", "false")
+        # ── Iceberg 1.5.0 AWS config (from AwsClientProperties source) ──────────
+        # "client.region" is read by AwsClientProperties and applied via
+        # applyClientRegionConfiguration → S3Client.builder().region(Region.of(...))
+        # This directly sets the region on the builder, bypassing
+        # DefaultAwsRegionProviderChain (which tries EC2 metadata and fails on k8s).
+        .config(
+            f"spark.sql.catalog.{CATALOG}.client.region",
+            os.getenv("AWS_REGION", "us-east-1"),
+        )
+        # "s3.access-key-id" / "s3.secret-access-key" are read by S3FileIOProperties
+        # and applied via applyCredentialConfigurations → StaticCredentialsProvider.
+        # Without these, DefaultCredentialsProvider also fails on non-AWS k8s.
+        .config(
+            f"spark.sql.catalog.{CATALOG}.s3.access-key-id",
+            os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
+        )
+        .config(
+            f"spark.sql.catalog.{CATALOG}.s3.secret-access-key",
+            os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        )
     )
     return builder.getOrCreate()
+
 
 
 def array_lookup(values: list[str], index_column: str = "record_id") -> str:

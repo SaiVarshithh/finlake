@@ -25,10 +25,17 @@ NAMESPACE = os.getenv("FINLAKE_K8S_NAMESPACE", "finlake")
 SPARK_IMAGE = os.getenv("FINLAKE_SPARK_IMAGE", "ghcr.io/saivarshithh/finlake-spark:latest")
 MINIO_CLIENT_IMAGE = os.getenv("FINLAKE_MINIO_CLIENT_IMAGE", "quay.io/minio/mc:latest")
 
+# Iceberg 1.5.0 reads region via AwsClientProperties.applyClientRegionConfiguration,
+# which is triggered by the catalog property "client.region".
+# Credentials are read by S3FileIOProperties via "s3.access-key-id" and
+# "s3.secret-access-key". These are applied directly to the S3ClientBuilder
+# in DefaultAwsClientFactory.s3(), bypassing the DefaultAwsRegionProviderChain
+# and DefaultCredentialsProvider entirely — no env vars or JVM flags needed.
+
 SPARK_EXTRA_ARGS = " ".join(
     [
         "--conf",
-        "spark.executor.instances=2",
+        "spark.executor.instances=1",
         "--conf",
         f"spark.kubernetes.container.image={SPARK_IMAGE}",
         "--conf",
@@ -39,14 +46,6 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.kubernetes.executor.label.app=finlake-spark",
         "--conf",
         "spark.kubernetes.executor.label.spark-pipeline=iceberg-transactions",
-        "--conf",
-        "spark.kubernetes.executorEnv.AWS_ACCESS_KEY_ID=minioadmin",
-        "--conf",
-        "spark.kubernetes.executorEnv.AWS_SECRET_ACCESS_KEY=minioadmin",
-        "--conf",
-        "spark.kubernetes.executorEnv.AWS_REGION=us-east-1",
-        "--conf",
-        "spark.kubernetes.executorEnv.AWS_DEFAULT_REGION=us-east-1",
         "--conf",
         "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         "--conf",
@@ -69,8 +68,23 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.sql.catalog.nessie.s3.path-style-access=true",
         "--conf",
         "spark.sql.catalog.nessie.cache-enabled=false",
+        # ── The actual fix ─────────────────────────────────────────────────────
+        # "client.region" is read by Iceberg's AwsClientProperties and applied
+        # via applyClientRegionConfiguration → S3Client.builder().region(...).
+        # This is the ONLY path that bypasses DefaultAwsRegionProviderChain in
+        # Iceberg 1.5.0's DefaultAwsClientFactory.
+        "--conf",
+        "spark.sql.catalog.nessie.client.region=us-east-1",
+        # "s3.access-key-id" / "s3.secret-access-key" are read by S3FileIOProperties
+        # and applied via applyCredentialConfigurations → StaticCredentialsProvider.
+        # Without these, DefaultCredentialsProvider also fails on non-AWS k8s.
+        "--conf",
+        "spark.sql.catalog.nessie.s3.access-key-id=minioadmin",
+        "--conf",
+        "spark.sql.catalog.nessie.s3.secret-access-key=minioadmin",
     ]
 )
+
 
 
 def load_kubernetes_config() -> None:
@@ -249,8 +263,8 @@ def submit_spark_job(**context) -> None:
                                 client.V1EnvVar(name="AIRFLOW_RUN_ID", value=context["run_id"]),
                             ],
                             resources=client.V1ResourceRequirements(
-                                requests={"cpu": "500m", "memory": "1.5Gi"},
-                                limits={"cpu": "2", "memory": "3Gi"},
+                                requests={"cpu": "250m", "memory": "512Mi"},
+                                limits={"cpu": "1", "memory": "1Gi"},
                             ),
                         )
                     ],
