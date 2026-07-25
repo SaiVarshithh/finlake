@@ -28,7 +28,7 @@ MINIO_CLIENT_IMAGE = os.getenv("FINLAKE_MINIO_CLIENT_IMAGE", "quay.io/minio/mc:l
 SPARK_EXTRA_ARGS = " ".join(
     [
         "--conf",
-        "spark.executor.instances=2",
+        "spark.executor.instances=1",
         "--conf",
         f"spark.kubernetes.container.image={SPARK_IMAGE}",
         "--conf",
@@ -249,8 +249,8 @@ def submit_spark_job(**context) -> None:
                                 client.V1EnvVar(name="AIRFLOW_RUN_ID", value=context["run_id"]),
                             ],
                             resources=client.V1ResourceRequirements(
-                                requests={"cpu": "500m", "memory": "1.5Gi"},
-                                limits={"cpu": "2", "memory": "3Gi"},
+                                requests={"cpu": "250m", "memory": "512Mi"},
+                                limits={"cpu": "1", "memory": "1Gi"},
                             ),
                         )
                     ],

@@ -137,11 +137,11 @@ spec:
           # lifetime, which is fine per the storage note above.
           resources:
             requests:
-              cpu: "300m"
-              memory: "1Gi"
+              cpu: "100m"
+              memory: "256Mi"
             limits:
               cpu: "1"
-              memory: "2Gi"
+              memory: "1Gi"
           readinessProbe:
             httpGet:
               path: /health
