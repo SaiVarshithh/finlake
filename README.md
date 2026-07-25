@@ -117,11 +117,7 @@ graph TD
 For verification of the deployed architecture, you can use the following commands:
 
 ```bash
-kubectl run finlake-verify-debug `
-  --image=ghcr.io/saivarshithh/finlake-spark:latest `
-  --namespace=finlake `
-  --restart=Never `
-  --overrides='{"spec": {"containers": [{"name": "spark-verify", "image": "ghcr.io/saivarshithh/finlake-spark:latest", "command": ["sleep", "3600"]}]}}'
+kubectl run finlake-verify-debug --image=ghcr.io/saivarshithh/finlake-spark:latest -n finlake --restart=Never --command -- sleep 3600
 ```
 
 This will deploy a pod with the image `ghcr.io/saivarshithh/finlake-spark:latest` in the `finlake` namespace. Once the pod is running, we can copy the verification script inside the pod.
