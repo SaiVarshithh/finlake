@@ -7,7 +7,7 @@ spec:
   ingressClassName: nginx
 
   rules:
-  - host: airflow.4-147-239-228.nip.io
+  - host: airflow.4.147.239.228.nip.io
     http:
       paths:
       - path: /

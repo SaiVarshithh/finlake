@@ -68,6 +68,14 @@ def build_spark() -> SparkSession:
             f"spark.sql.catalog.{CATALOG}.s3.endpoint",
             os.getenv("S3_ENDPOINT", "http://finlake-minio:9000"),
         )
+        # AWS SDK v2 always requires a region even for non-AWS S3 endpoints (MinIO).
+        # Setting it here ensures the Iceberg AwsClientFactory uses it directly
+        # instead of falling through the DefaultAwsRegionProviderChain (which
+        # tries EC2 metadata and fails in a local k8s cluster).
+        .config(
+            f"spark.sql.catalog.{CATALOG}.s3.region",
+            os.getenv("AWS_REGION", "us-east-1"),
+        )
         .config(f"spark.sql.catalog.{CATALOG}.s3.path-style-access", "true")
         .config(f"spark.sql.catalog.{CATALOG}.cache-enabled", "false")
     )

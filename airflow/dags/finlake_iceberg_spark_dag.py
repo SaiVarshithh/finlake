@@ -66,6 +66,11 @@ SPARK_EXTRA_ARGS = " ".join(
         "--conf",
         "spark.sql.catalog.nessie.s3.endpoint=http://finlake-minio:9000",
         "--conf",
+        # AWS SDK v2 needs a region even for MinIO. This catalog-level s3.region
+        # setting is read directly by Iceberg's AwsClientFactory and bypasses the
+        # DefaultAwsRegionProviderChain (which tries EC2 metadata and fails here).
+        "spark.sql.catalog.nessie.s3.region=us-east-1",
+        "--conf",
         "spark.sql.catalog.nessie.s3.path-style-access=true",
         "--conf",
         "spark.sql.catalog.nessie.cache-enabled=false",
