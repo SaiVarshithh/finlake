@@ -4,10 +4,11 @@ from pyspark.sql.types import (
 )
 from pyspark.sql import DataFrame
 from config.app_config import get_app_config
+from spark.handler import SparkHandler
 
 app_config = get_app_config()
 
-class RawStockPrices:
+class RawStockPrices(SparkHandler):
     TABLE_NAME = f"{app_config.catalog}.finlake_bronze.raw_stock_prices"
     PARTITION_BY = "months(trade_date)"
     TABLE_PROPERTIES = {
@@ -47,7 +48,7 @@ class RawStockPrices:
         return schema
 
 
-class DimTickers:
+class DimTickers(SparkHandler):
     TABLE_NAME = f"{app_config.catalog}.finlake_bronze.dim_tickers"
     PARTITION_BY = None
     TABLE_PROPERTIES = {

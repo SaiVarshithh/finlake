@@ -1,7 +1,7 @@
 
 import functools
 import inspect
-from pyspark.sql import SparkSession
+from .spark_config import build_spark
 
 
 def iceberg_initialisation(func=None, *, models=None):
@@ -26,8 +26,14 @@ def iceberg_initialisation(func=None, *, models=None):
     def decorator(f):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
-            # 1. Access/Create Spark Session
-            spark = SparkSession.builder.getOrCreate()
+            # 1. Access/Create Spark Session — must go through build_spark() so
+            # Iceberg's SQL extensions and the Nessie catalog config are
+            # registered on the session BEFORE any CREATE NAMESPACE / CREATE
+            # TABLE statements run against it. A bare SparkSession.builder
+            # .getOrCreate() here would create (or attach to) a session with
+            # no Iceberg catalog registered, and the DDL below would fail or
+            # silently target the wrong catalog.
+            spark = build_spark()
             
             # 2. Resolve target models
             target_models = models

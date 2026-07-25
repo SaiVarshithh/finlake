@@ -32,7 +32,7 @@ ENV JDK_JAVA_OPTIONS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=ja
 # ------------------------------------------------------------------------------
 # Install Python dependencies
 # ------------------------------------------------------------------------------
-COPY requirements.txt /tmp/requirements.txt
+COPY spark/requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
@@ -68,10 +68,15 @@ RUN useradd -m -u 1001 -s /bin/bash spark
 # ------------------------------------------------------------------------------
 # Copy application
 # ------------------------------------------------------------------------------
-COPY --chown=spark:spark jobs/ /opt/spark-jobs/
-COPY --chown=spark:spark entrypoint.sh /opt/spark/entrypoint.sh
+COPY --chown=spark:spark spark/jobs/ /opt/spark-jobs/
+COPY --chown=spark:spark spark/handler/ /opt/spark-jobs/spark/handler/
+COPY --chown=spark:spark spark/model/ /opt/spark-jobs/spark/model/
+COPY --chown=spark:spark config/ /opt/spark-jobs/config/
+COPY --chown=spark:spark spark/entrypoint.sh /opt/spark/entrypoint.sh
 
 RUN chmod +x /opt/spark/entrypoint.sh
+
+ENV PYTHONPATH="/opt/spark-jobs:${PYTHONPATH:-}"
 
 WORKDIR /opt/spark-jobs
 

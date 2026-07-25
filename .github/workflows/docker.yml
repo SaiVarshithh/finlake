@@ -18,9 +18,11 @@ jobs:
       matrix:
         include:
           - image: finlake-spark
-            context: spark
+            context: .
+            dockerfile: spark/Dockerfile
           - image: finlake-airflow
             context: airflow
+            dockerfile: airflow/Dockerfile
 
     steps:
       - name: Checkout source
@@ -39,16 +41,15 @@ jobs:
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "image=ghcr.io/$OWNER/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
 
-      # Each image is built with its OWN folder as the build context (not
-      # repo root) — spark/Dockerfile only sees spark/, airflow/Dockerfile
-      # only sees airflow/. That's the whole point of separating them:
-      # neither image can accidentally COPY the other's files, and each
-      # Dockerfile's COPY paths are self-contained relative to its folder.
+      # Build the images using the specified context and Dockerfile.
+      # Spark image uses the repository root context to access config/ and spark/ modules,
+      # while Airflow remains self-contained inside its airflow/ folder.
       - name: Build image
         run: |
           docker build \
             -t ${{ steps.meta.outputs.image }}:${{ github.sha }} \
             -t ${{ steps.meta.outputs.image }}:latest \
+            -f ${{ matrix.dockerfile }} \
             ${{ matrix.context }}
 
       - name: Push image
