@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-ingress
+  namespace: finlake
+spec:
+  ingressClassName: nginx
+
+  rules:
+  - host: minio.4.147.239.228.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: finlake-minio
+            port:
+              number: 9001
