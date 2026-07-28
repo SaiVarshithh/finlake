@@ -35,10 +35,16 @@ spec:
         - name: data
           persistentVolumeClaim: { claimName: postgres-pvc }
 ---
+# Changing from NodePort to LoadBalancer type to get an external IP Adress where it can be configured to DBeaver.
+# But, current quota has limit of 3 Public IP Address in a region, Kubenetes is using 1, ingress-nginx controller is using another, 3rd one is mystery
 apiVersion: v1
 kind: Service
 metadata: { name: finlake-postgres, namespace: finlake }
 spec:
-  selector: { app: finlake-postgres }
-  type: NodePort
-  ports: [{ port: 5432, targetPort: 5432, nodePort: 30432 }]
+  selector:
+    app: finlake-postgres
+  type: LoadBalancer
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
