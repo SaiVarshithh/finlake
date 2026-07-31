@@ -268,17 +268,19 @@ curl http://<external-ip>
 If timeout occurs, update the Service:
 
 ```bash
-kubectl patch svc ingress-nginx-controller \
--n ingress-nginx \
--p '{"spec":{"externalTrafficPolicy":"Local"}}'
+kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec":{"externalTrafficPolicy":"Local"}}'
+```
+
+### Windows PowerShell
+
+```cmd
+kubectl patch svc ingress-nginx-controller -n ingress-nginx -p "{\"spec\":{\"externalTrafficPolicy\":\"Local\"}}"
 ```
 
 Confirm:
 
 ```bash
-kubectl get svc ingress-nginx-controller \
--n ingress-nginx \
--o jsonpath="{.spec.healthCheckNodePort}"
+kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath="{.spec.healthCheckNodePort}"
 ```
 
 A HealthCheckNodePort should be allocated.

@@ -13,6 +13,9 @@ kafka-python==2.0.2
 # Utilities
 python-dotenv==1.1.1
 
+# Market data (Bronze ingestion — yfinance pull)
+yfinance==0.2.66
+
 # ── Add extra packages below as your jobs need them ──────────────────────────
 # great-expectations==1.5.1   # ~200 MB — add back when needed for DQ jobs
 # boto3                        # AWS S3

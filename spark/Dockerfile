@@ -53,8 +53,8 @@ ENV PATH="${SPARK_HOME}/bin:${SPARK_HOME}/sbin:${PATH}"
 # Runtime Defaults
 # ------------------------------------------------------------------------------
 ENV SPARK_MASTER="local[*]"
-ENV SPARK_APP_NAME="finlake-iceberg-transactions"
-ENV SPARK_JOB_FILE="/opt/spark-jobs/iceberg_transactions_job.py"
+ENV SPARK_APP_NAME="finlake-bronze-stock-prices"
+ENV SPARK_JOB_FILE="/opt/spark-jobs/bronze_stock_writer.py"
 ENV SPARK_DRIVER_MEMORY="1g"
 ENV SPARK_EXECUTOR_MEMORY="1g"
 ENV SPARK_EXECUTOR_CORES="1"

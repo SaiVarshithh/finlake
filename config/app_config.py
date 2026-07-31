@@ -19,6 +19,7 @@ class AppConfig:
     @classmethod
     def from_env(cls) -> "AppConfig":
         return cls(
+            catalog=os.getenv("ICEBERG_CATALOG", "nessie"),
             nessie_uri=os.getenv("NESSIE_URI", "http://finlake-nessie:19120/api/v1"),
             nessie_ref=os.getenv("NESSIE_REF", "main"),
             nessie_auth_type=os.getenv("NESSIE_AUTH_TYPE", "NONE"),
