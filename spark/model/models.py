@@ -61,6 +61,7 @@ class RawStockPrices(SparkHandler):
             # FanoutDataWriter opens at most N_dates compressors (not N_tickers × N_dates).
             .repartition(F.col("ticker"))
             .write.format("iceberg")
+            .option("check-nullability", "false")
             .mode("overwrite")
             .option("overwrite-mode", "dynamic")
             .save(self.TABLE_NAME)
@@ -102,7 +103,7 @@ class DimTickers(SparkHandler):
         return self.spark.read.format("iceberg").load(self.TABLE_NAME)
 
     def write_dim_tickers_df(self, df: DataFrame) -> None:
-        df.write.format("iceberg").mode("overwrite").save(self.TABLE_NAME)
+        df.write.format("iceberg").option("check-nullability", "false").mode("overwrite").save(self.TABLE_NAME)
 
     @classmethod
     def get_schema(cls):
