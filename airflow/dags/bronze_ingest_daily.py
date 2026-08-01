@@ -81,13 +81,14 @@ SPARK_EXTRA_ARGS = " ".join(
         # SNAPPY is heap-friendly: fixed 32KB buffer vs GZIP's multi-MB ByteArrayOutputStream
         "--conf",
         "spark.sql.parquet.compression.codec=snappy",
-        # Disable FanoutWriter (keeps 1 writer/partition open simultaneously per task)
-        # With 103 ticker partitions that exhausts heap. Sorted write uses 1 writer at a time.
+        # fanout.enabled=false: prefer sorted writes (one writer at a time per partition)
         "--conf",
         "spark.sql.iceberg.fanout.enabled=false",
-        # Low row count (~1500 rows, 103 tickers) — default 200 shuffle partitions is wasteful
+        # 200 shuffle partitions: with hash distribution and 105 tickers, each of the
+        # ~105 active tasks handles 1 ticker × N_dates compressors — safe at any lookback.
+        # Setting this too low (e.g. 4) means each task handles 26 tickers × N_dates → OOM.
         "--conf",
-        "spark.sql.shuffle.partitions=4",
+        "spark.sql.shuffle.partitions=200",
     ]
 )
 

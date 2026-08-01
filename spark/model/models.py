@@ -22,7 +22,10 @@ class RawStockPrices(SparkHandler):
     TABLE_PROPERTIES = {
         "format-version": "2",
         "write.parquet.compression-codec": "snappy",
-        "write.distribution-mode": "none",
+        # hash: Spark pre-shuffles by partition key before writing.
+        # Each task gets data for fewer unique partitions → fewer simultaneous compressors.
+        # 'none' was WRONG — it forces FanoutDataWriter with ALL partitions open at once.
+        "write.distribution-mode": "hash",
     }
 
     def __init__(self):
@@ -37,20 +40,30 @@ class RawStockPrices(SparkHandler):
 
     def write_raw_stock_prices_df(self, df: DataFrame) -> None:
         """
-        Idempotent write via MERGE INTO on (ticker, trade_date). Re-running a
-        date/ticker combination updates that row instead of inserting a
-        duplicate; other partitions are untouched.
+        Idempotent write via dynamic partition overwrite.
+
+        Replaces MERGE INTO (which reads + joins ALL matching target partitions)
+        with a much cheaper pattern:
+          1. Deduplicate source rows on (ticker, trade_date)
+          2. Repartition by ticker — ensures each Spark task writes 1 ticker's data.
+             FanoutDataWriter then opens at most N_unique_dates compressors per task
+             (e.g. 60 for 60-day lookback, 365 for a year) instead of
+             N_tickers × N_dates (6300+ for 105 tickers × 60 days).
+          3. Dynamic overwrite atomically replaces only the (date, ticker)
+             partition files that appear in the new data — other partitions
+             are untouched. Re-running is fully idempotent.
         """
-        source_view = "raw_stock_prices_source"
-        df.dropDuplicates(["ticker", "trade_date"]).createOrReplaceTempView(source_view)
-        self.spark.sql(
-            f"""
-            MERGE INTO {self.TABLE_NAME} t
-            USING {source_view} s
-            ON t.ticker = s.ticker AND t.trade_date = s.trade_date
-            WHEN MATCHED THEN UPDATE SET *
-            WHEN NOT MATCHED THEN INSERT *
-            """
+        from pyspark.sql import functions as F  # noqa: PLC0415
+
+        (
+            df.dropDuplicates(["ticker", "trade_date"])
+            # One Spark task per ticker: each task handles 1 ticker × N dates.
+            # FanoutDataWriter opens at most N_dates compressors (not N_tickers × N_dates).
+            .repartition(F.col("ticker"))
+            .write.format("iceberg")
+            .mode("overwrite")
+            .option("overwrite-mode", "dynamic")
+            .save(self.TABLE_NAME)
         )
 
     @classmethod
