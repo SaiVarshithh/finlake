@@ -11,14 +11,22 @@ Environment variables:
                              Default: 20.
     BACKFILL_START           Optional explicit start date, YYYY-MM-DD.
     BACKFILL_END             Optional explicit end date, YYYY-MM-DD, exclusive.
+    BACKFILL_CHUNK_DAYS      Max calendar-day span downloaded/written per
+                             chunk. The whole [start, end) range is split
+                             into chunks of this size and processed one at a
+                             time so driver/executor memory stays bounded
+                             regardless of how many years are requested.
+                             Default: 30.
     FINLAKE_MARKET_TZ        Timezone used to resolve "today". Default:
                              Asia/Kolkata.
-    MIN_SUCCESSFUL_TICKERS   Minimum distinct tickers that must land. Default:
-                             min(20, requested ticker count).
+    MIN_SUCCESSFUL_TICKERS   Minimum distinct tickers that must land across
+                             the whole run. Default: min(20, requested
+                             ticker count).
 """
 
 from __future__ import annotations
 
+import gc
 import os
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -68,6 +76,17 @@ def resolve_date_range() -> tuple[date, date]:
     if start_date >= end_date:
         raise ValueError(f"Invalid yfinance date range: start={start_date}, end={end_date}")
     return start_date, end_date
+
+
+def chunk_date_range(start_date: date, end_date: date, chunk_days: int) -> list[tuple[date, date]]:
+    """Split [start_date, end_date) into consecutive sub-ranges of at most chunk_days."""
+    chunks: list[tuple[date, date]] = []
+    cursor = start_date
+    while cursor < end_date:
+        chunk_end = min(cursor + timedelta(days=chunk_days), end_date)
+        chunks.append((cursor, chunk_end))
+        cursor = chunk_end
+    return chunks
 
 
 def resolve_tickers() -> list[dict[str, str]]:
@@ -122,36 +141,16 @@ def download_prices(yf_symbols: list[str], start_date: date, end_date: date):
     )
 
 
-@iceberg_initialisation
-def main() -> None:
-    spark = build_spark()
-    spark.sparkContext.setLogLevel("WARN")
-
-    tickers = resolve_tickers()
-    if not tickers:
-        raise ValueError("No valid tickers resolved. Check FINLAKE_TICKERS.")
-
-    start_date, end_date = resolve_date_range()
-    symbol_to_meta = {ticker["yfinance_symbol"]: ticker for ticker in tickers}
-    yf_symbols = list(symbol_to_meta)
-
-    print("=" * 80)
-    print("FinLake Bronze Stock Writer")
-    print(f"Target table       : {RawStockPrices.TABLE_NAME}")
-    print(f"Ticker count       : {len(tickers)}")
-    print(f"Date range         : {start_date} -> {end_date} (end exclusive)")
-    print("=" * 80)
-
-    raw = download_prices(yf_symbols, start_date, end_date)
-    if raw.empty:
-        raise ValueError("yfinance returned no data for the requested tickers/date range.")
-
-    airflow_run_id = os.getenv("AIRFLOW_RUN_ID", "").strip()
-    batch_id = airflow_run_id or f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
-    ingestion_ts = datetime.now(timezone.utc)
-
-    rows = []
-    successful_tickers = set()
+def parse_rows(
+    raw,
+    yf_symbols: list[str],
+    symbol_to_meta: dict[str, dict[str, str]],
+    batch_id: str,
+    ingestion_ts: datetime,
+) -> tuple[list[tuple], set[str]]:
+    """Convert a single yfinance download into (row_tuples, successful_tickers)."""
+    rows: list[tuple] = []
+    successful_tickers: set[str] = set()
     required_columns = ["Open", "High", "Low", "Close", "Volume"]
 
     for yf_symbol in yf_symbols:
@@ -192,29 +191,101 @@ def main() -> None:
             )
             successful_tickers.add(meta["ticker"])
 
-    if not rows:
-        raise ValueError("No valid rows parsed from the yfinance response.")
+    return rows, successful_tickers
+
+
+@iceberg_initialisation
+def main() -> None:
+    spark = build_spark()
+    spark.sparkContext.setLogLevel("WARN")
+
+    tickers = resolve_tickers()
+    if not tickers:
+        raise ValueError("No valid tickers resolved. Check FINLAKE_TICKERS.")
+
+    start_date, end_date = resolve_date_range()
+    chunk_days = parse_positive_int(os.getenv("BACKFILL_CHUNK_DAYS"), 30, "BACKFILL_CHUNK_DAYS")
+    date_chunks = chunk_date_range(start_date, end_date, chunk_days)
+
+    symbol_to_meta = {ticker["yfinance_symbol"]: ticker for ticker in tickers}
+    yf_symbols = list(symbol_to_meta)
+
+    print("=" * 80)
+    print("FinLake Bronze Stock Writer")
+    print(f"Target table       : {RawStockPrices.TABLE_NAME}")
+    print(f"Ticker count       : {len(tickers)}")
+    print(f"Date range         : {start_date} -> {end_date} (end exclusive)")
+    print(f"Chunking           : {len(date_chunks)} chunk(s) of <= {chunk_days} day(s)")
+    print("=" * 80)
+
+    airflow_run_id = os.getenv("AIRFLOW_RUN_ID", "").strip()
+    batch_id = airflow_run_id or f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
+
+    all_successful_tickers: set[str] = set()
+    total_rows_written = 0
+
+    for chunk_index, (chunk_start, chunk_end) in enumerate(date_chunks, start=1):
+        print(
+            f"[bronze_stock_writer] Chunk {chunk_index}/{len(date_chunks)}: "
+            f"{chunk_start} -> {chunk_end} (end exclusive)"
+        )
+
+        raw = download_prices(yf_symbols, chunk_start, chunk_end)
+        if raw.empty:
+            print(f"[bronze_stock_writer] WARNING: no data for chunk {chunk_start}->{chunk_end}, skipping")
+            continue
+
+        ingestion_ts = datetime.now(timezone.utc)
+        rows, successful_tickers = parse_rows(raw, yf_symbols, symbol_to_meta, batch_id, ingestion_ts)
+        # Free the pandas frame before we touch Spark — it is no longer needed
+        # and for multi-year backfills it can be tens of MB per chunk on the
+        # driver, which is the tightest memory budget in the whole pipeline.
+        del raw
+
+        if not rows:
+            print(f"[bronze_stock_writer] WARNING: no valid rows parsed for chunk {chunk_start}->{chunk_end}")
+            continue
+
+        df = spark.createDataFrame(rows, schema=RawStockPrices.get_schema())
+        row_count = df.count()
+        print(
+            f"[bronze_stock_writer] Chunk {chunk_index}/{len(date_chunks)}: parsed {row_count} rows "
+            f"across {len(successful_tickers)} tickers"
+        )
+
+        RawStockPrices().write_raw_stock_prices_df(df)
+        print(f"[bronze_stock_writer] Chunk {chunk_index}/{len(date_chunks)}: merged into {RawStockPrices.TABLE_NAME}")
+
+        total_rows_written += row_count
+        all_successful_tickers |= successful_tickers
+
+        # Drop this chunk's Spark-side state (cached plans, shuffle files
+        # referenced by the DataFrame lineage) before starting the next
+        # chunk so a long backfill doesn't accumulate memory across chunks
+        # in the same driver/executor JVMs.
+        del df, rows
+        spark.catalog.clearCache()
+        gc.collect()
+
+    if total_rows_written == 0:
+        raise ValueError("No valid rows parsed from the yfinance response across any chunk.")
 
     min_successful_tickers = parse_positive_int(
         os.getenv("MIN_SUCCESSFUL_TICKERS"),
         min(20, len(tickers)),
         "MIN_SUCCESSFUL_TICKERS",
     )
-    if len(successful_tickers) < min_successful_tickers:
+    if len(all_successful_tickers) < min_successful_tickers:
         raise RuntimeError(
             "Only "
-            f"{len(successful_tickers)} tickers landed, below required minimum "
-            f"{min_successful_tickers}. Successful tickers: {sorted(successful_tickers)}"
+            f"{len(all_successful_tickers)} tickers landed, below required minimum "
+            f"{min_successful_tickers}. Successful tickers: {sorted(all_successful_tickers)}"
         )
 
-    df = spark.createDataFrame(rows, schema=RawStockPrices.get_schema())
     print(
-        "[bronze_stock_writer] Parsed "
-        f"{df.count()} rows across {len(successful_tickers)} successful tickers."
+        f"[bronze_stock_writer] Done: {total_rows_written} rows across "
+        f"{len(all_successful_tickers)} tickers, batch_id={batch_id}"
     )
-
-    RawStockPrices().write_raw_stock_prices_df(df)
-    print(f"[bronze_stock_writer] Merged rows into {RawStockPrices.TABLE_NAME} (batch_id={batch_id})")
 
     added_date = datetime.now(timezone.utc).date()
     dim_rows = [

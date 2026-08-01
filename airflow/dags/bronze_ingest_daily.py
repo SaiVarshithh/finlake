@@ -45,6 +45,14 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.kubernetes.executor.label.app=finlake-spark",
         "--conf",
         "spark.kubernetes.executor.label.spark-pipeline=bronze-stock-prices",
+        # Explicit executor pod memory ceiling. Without this, k8s derives the
+        # pod limit from executor-memory + memoryOverhead automatically, which
+        # is fine normally -- setting it explicitly here just makes the real
+        # ceiling visible next to the other memory knobs below.
+        "--conf",
+        "spark.kubernetes.executor.limit.memory=3g",
+        "--conf",
+        "spark.kubernetes.executor.request.memory=2500m",
         # ── Iceberg / catalog ────────────────────────────────────────────────────
         "--conf",
         "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
@@ -75,9 +83,11 @@ SPARK_EXTRA_ARGS = " ".join(
         "--conf",
         "spark.sql.catalog.nessie.s3.secret-access-key=minioadmin",
         # ── Memory / OOM fixes ───────────────────────────────────────────────────
-        # Extra non-JVM memory (S3 I/O buffers, shuffle network, etc.)
+        # Extra non-JVM memory (S3 I/O buffers, shuffle network, etc.). Bumped
+        # from 512m -- Iceberg/Parquet buffering plus decimal-column boxing
+        # was eating into this even on small chunks.
         "--conf",
-        "spark.executor.memoryOverhead=512m",
+        "spark.executor.memoryOverhead=1g",
         # SNAPPY is heap-friendly: fixed 32KB buffer vs GZIP's multi-MB ByteArrayOutputStream
         "--conf",
         "spark.sql.parquet.compression.codec=snappy",
@@ -188,8 +198,8 @@ def resolve_lookback_days(**context) -> int:
         lookback_days = int(value)
     except (TypeError, ValueError) as exc:
         raise AirflowException(f"lookback_days must be an integer, got {value!r}") from exc
-    if lookback_days < 1 or lookback_days > 366:
-        raise AirflowException("lookback_days must be between 1 and 366.")
+    if lookback_days < 1 or lookback_days > 800:
+        raise AirflowException("lookback_days must be between 1 and 800.")
     return lookback_days
 
 
@@ -251,7 +261,13 @@ def submit_bronze_stock_job(**context) -> None:
         client.V1EnvVar(name="SPARK_MASTER", value="k8s://https://kubernetes.default.svc:443"),
         client.V1EnvVar(name="SPARK_APP_NAME", value="finlake-bronze-stock-prices"),
         client.V1EnvVar(name="SPARK_JOB_FILE", value="/opt/spark-jobs/bronze_stock_writer.py"),
-        client.V1EnvVar(name="SPARK_DRIVER_MEMORY", value="1g"),
+        # deployMode=client (see spark/entrypoint.sh): this driver pod is the
+        # SAME process that runs yfinance + pandas + Python row-building in
+        # bronze_stock_writer.py, on top of the JVM. 1g driver heap inside a
+        # 1Gi pod limit left ~0 headroom for that Python-side memory -- raised
+        # both. BACKFILL_CHUNK_DAYS (job env) bounds how much pandas data is
+        # ever resident at once, independent of total backfill range.
+        client.V1EnvVar(name="SPARK_DRIVER_MEMORY", value="1200m"),
         client.V1EnvVar(name="SPARK_EXECUTOR_MEMORY", value="2g"),
         client.V1EnvVar(name="SPARK_EXECUTOR_CORES", value="1"),
         client.V1EnvVar(name="SPARK_EXTRA_ARGS", value=SPARK_EXTRA_ARGS),
@@ -263,6 +279,11 @@ def submit_bronze_stock_job(**context) -> None:
         client.V1EnvVar(name="AIRFLOW_RUN_ID", value=context["run_id"]),
         client.V1EnvVar(name="FINLAKE_MARKET_TZ", value="Asia/Kolkata"),
         client.V1EnvVar(name="LOOKBACK_DAYS", value=str(lookback_days)),
+        # Bounds how many days of yfinance data are held in pandas/Python-list
+        # form at once inside bronze_stock_writer.py, regardless of how long
+        # the total requested range is. See BACKFILL_CHUNK_DAYS in that job's
+        # docstring.
+        client.V1EnvVar(name="BACKFILL_CHUNK_DAYS", value=os.getenv("FINLAKE_BACKFILL_CHUNK_DAYS", "30")),
     ]
     if tickers_csv:
         env.append(client.V1EnvVar(name="FINLAKE_TICKERS", value=tickers_csv))
@@ -294,8 +315,8 @@ def submit_bronze_stock_job(**context) -> None:
                             image_pull_policy="Always",
                             env=env,
                             resources=client.V1ResourceRequirements(
-                                requests={"cpu": "250m", "memory": "512Mi"},
-                                limits={"cpu": "1", "memory": "1Gi"},
+                                requests={"cpu": "250m", "memory": "1Gi"},
+                                limits={"cpu": "1", "memory": "2Gi"},
                             ),
                         )
                     ],
@@ -306,7 +327,10 @@ def submit_bronze_stock_job(**context) -> None:
 
     print(f"Submitting Bronze stock ingest for lookback_days={lookback_days}, tickers={tickers_csv or 'default'}")
     create_job(batch_api, body)
-    wait_for_job(batch_api, core_api, name, timeout_seconds=1800)
+    # 1800s was sized for the ~20-day daily run. A 2-year backfill processes
+    # ~24 sequential 30-day chunks (yfinance download + Spark write each) --
+    # give it real headroom instead of failing the DAG on a slow but healthy job.
+    wait_for_job(batch_api, core_api, name, timeout_seconds=13500)
 
 
 with DAG(
@@ -316,15 +340,19 @@ with DAG(
     start_date=pendulum.datetime(2026, 1, 1, tz="Asia/Kolkata"),
     catchup=False,
     max_active_runs=1,
-    dagrun_timeout=timedelta(minutes=45),
+    dagrun_timeout=timedelta(hours=4),  # multi-year backfills run many sequential yfinance+write chunks
     default_args={"owner": "finlake", "retries": 0},
     params={
         "lookback_days": Param(
             20,
             type="integer",
             minimum=1,
-            maximum=366,
-            description="Calendar days to pull ending at tomorrow in Asia/Kolkata. Use 183+ for a backfill.",
+            maximum=800,
+            description=(
+                "Calendar days to pull ending at tomorrow in Asia/Kolkata. "
+                "Use 183+ for a backfill -- the job processes it in "
+                "BACKFILL_CHUNK_DAYS-sized chunks internally, so 730 (2 years) is safe."
+            ),
         )
     },
     tags=["finlake", "bronze", "stocks", "yfinance", "iceberg"],
