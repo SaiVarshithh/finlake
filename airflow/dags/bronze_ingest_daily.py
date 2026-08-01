@@ -45,14 +45,6 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.kubernetes.executor.label.app=finlake-spark",
         "--conf",
         "spark.kubernetes.executor.label.spark-pipeline=bronze-stock-prices",
-        # Explicit executor pod memory ceiling. Without this, k8s derives the
-        # pod limit from executor-memory + memoryOverhead automatically, which
-        # is fine normally -- setting it explicitly here just makes the real
-        # ceiling visible next to the other memory knobs below.
-        "--conf",
-        "spark.kubernetes.executor.limit.memory=3g",
-        "--conf",
-        "spark.kubernetes.executor.request.memory=2500m",
         # ── Iceberg / catalog ────────────────────────────────────────────────────
         "--conf",
         "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
@@ -82,23 +74,43 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.sql.catalog.nessie.s3.access-key-id=minioadmin",
         "--conf",
         "spark.sql.catalog.nessie.s3.secret-access-key=minioadmin",
-        # ── Memory / OOM fixes ───────────────────────────────────────────────────
-        # Extra non-JVM memory (S3 I/O buffers, shuffle network, etc.). Bumped
-        # from 512m -- Iceberg/Parquet buffering plus decimal-column boxing
-        # was eating into this even on small chunks.
+        # ── Memory / CPU footprint ───────────────────────────────────────────────
+        # Cluster reality (kubectl describe/top, checked 2026-08-01): 3 small AKS
+        # nodes, ~5Gi/~1.9 CPU allocatable each, mostly eaten by AKS system pods.
+        # Free headroom per node is roughly 1-3Gi memory / 0.02-1.1 CPU cores.
+        # Sized to fit inside that, not to some abstract "safe" JVM number.
+        # executor-memory(640m) + memoryOverhead(384m) ~= 1024Mi JVM footprint.
         "--conf",
-        "spark.executor.memoryOverhead=1g",
+        "spark.executor.memoryOverhead=384m",
+        # request==limit (Guaranteed QoS): on a cluster this tight we want a
+        # clean scheduling failure, not an eviction mid-chunk from bursting.
+        "--conf",
+        "spark.kubernetes.executor.request.memory=1100Mi",
+        "--conf",
+        "spark.kubernetes.executor.limit.memory=1100Mi",
+        # Logical parallelism (task slots) stays 1 -- spark.executor.cores below --
+        # but the k8s CPU *reservation* is set lower so the pod actually fits in
+        # the ~1 free core we have on any given node.
+        "--conf",
+        "spark.kubernetes.executor.request.cores=500m",
         # SNAPPY is heap-friendly: fixed 32KB buffer vs GZIP's multi-MB ByteArrayOutputStream
         "--conf",
         "spark.sql.parquet.compression.codec=snappy",
         # fanout.enabled=false: prefer sorted writes (one writer at a time per partition)
         "--conf",
         "spark.sql.iceberg.fanout.enabled=false",
-        # 200 shuffle partitions: with hash distribution and 105 tickers, each of the
-        # ~105 active tasks handles 1 ticker × N_dates compressors — safe at any lookback.
-        # Setting this too low (e.g. 4) means each task handles 26 tickers × N_dates → OOM.
+        # 200 shuffle partitions made sense as a ceiling, but with 1 executor /
+        # 1 core every partition is a sequential task -- 200 of them is 200x the
+        # per-task bookkeeping (codec instances, task metadata) for no
+        # parallelism benefit on this hardware. AQE coalesces empty/small
+        # partitions automatically, so a lower starting count plus AQE is both
+        # lighter on this executor's heap and self-tuning.
         "--conf",
-        "spark.sql.shuffle.partitions=200",
+        "spark.sql.shuffle.partitions=48",
+        "--conf",
+        "spark.sql.adaptive.enabled=true",
+        "--conf",
+        "spark.sql.adaptive.coalescePartitions.enabled=true",
     ]
 )
 
