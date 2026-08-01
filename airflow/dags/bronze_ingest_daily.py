@@ -13,6 +13,7 @@ import json
 import os
 import time
 from datetime import timedelta
+import warnings
 
 import pendulum
 from airflow import DAG
@@ -23,6 +24,8 @@ from airflow.operators.python import PythonOperator
 from kubernetes import client, config
 from kubernetes.client import ApiException
 
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 NAMESPACE = os.getenv("FINLAKE_K8S_NAMESPACE", "finlake")
 SPARK_IMAGE = os.getenv("FINLAKE_SPARK_IMAGE", "ghcr.io/saivarshithh/finlake-spark:latest")
@@ -42,6 +45,7 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.kubernetes.executor.label.app=finlake-spark",
         "--conf",
         "spark.kubernetes.executor.label.spark-pipeline=bronze-stock-prices",
+        # ── Iceberg / catalog ────────────────────────────────────────────────────
         "--conf",
         "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         "--conf",
@@ -70,6 +74,20 @@ SPARK_EXTRA_ARGS = " ".join(
         "spark.sql.catalog.nessie.s3.access-key-id=minioadmin",
         "--conf",
         "spark.sql.catalog.nessie.s3.secret-access-key=minioadmin",
+        # ── Memory / OOM fixes ───────────────────────────────────────────────────
+        # Extra non-JVM memory (S3 I/O buffers, shuffle network, etc.)
+        "--conf",
+        "spark.executor.memoryOverhead=512m",
+        # SNAPPY is heap-friendly: fixed 32KB buffer vs GZIP's multi-MB ByteArrayOutputStream
+        "--conf",
+        "spark.sql.parquet.compression.codec=snappy",
+        # Disable FanoutWriter (keeps 1 writer/partition open simultaneously per task)
+        # With 103 ticker partitions that exhausts heap. Sorted write uses 1 writer at a time.
+        "--conf",
+        "spark.sql.iceberg.fanout.enabled=false",
+        # Low row count (~1500 rows, 103 tickers) — default 200 shuffle partitions is wasteful
+        "--conf",
+        "spark.sql.shuffle.partitions=4",
     ]
 )
 
@@ -233,7 +251,7 @@ def submit_bronze_stock_job(**context) -> None:
         client.V1EnvVar(name="SPARK_APP_NAME", value="finlake-bronze-stock-prices"),
         client.V1EnvVar(name="SPARK_JOB_FILE", value="/opt/spark-jobs/bronze_stock_writer.py"),
         client.V1EnvVar(name="SPARK_DRIVER_MEMORY", value="1g"),
-        client.V1EnvVar(name="SPARK_EXECUTOR_MEMORY", value="1g"),
+        client.V1EnvVar(name="SPARK_EXECUTOR_MEMORY", value="2g"),
         client.V1EnvVar(name="SPARK_EXECUTOR_CORES", value="1"),
         client.V1EnvVar(name="SPARK_EXTRA_ARGS", value=SPARK_EXTRA_ARGS),
         client.V1EnvVar(name="AWS_ACCESS_KEY_ID", value="minioadmin"),

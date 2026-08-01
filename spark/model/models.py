@@ -21,8 +21,8 @@ class RawStockPrices(SparkHandler):
     PARTITION_EVOLUTION = ["days(trade_date)", "ticker"]
     TABLE_PROPERTIES = {
         "format-version": "2",
-        "write.parquet.compression-codec": "zstd",
-        "write.distribution-mode": "hash",
+        "write.parquet.compression-codec": "snappy",
+        "write.distribution-mode": "none",
     }
 
     def __init__(self):
@@ -77,8 +77,8 @@ class DimTickers(SparkHandler):
     PARTITION_BY = None
     TABLE_PROPERTIES = {
         "format-version": "2",
-        "write.parquet.compression-codec": "zstd",
-        "write.distribution-mode": "hash",
+        "write.parquet.compression-codec": "snappy",
+        "write.distribution-mode": "none",
     }
 
     def __init__(self):

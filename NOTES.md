@@ -72,10 +72,35 @@ trino-ingress       nginx       trino.finlake.local         4.237.10.150        
 | DNS | Username | Password |
 |-----|----------|----------|
 | Trino: http://trino.4.237.10.150.nip.io/ | admin | - |
-| Airflow: http://airflow.4.237.10.150.nip.io/ | admin | exec into pod and cat standalone-password.txt |
+| Airflow: http://airflow.4.237.10.150.nip.io/ | admin | admin |
 | MinIO: http://minio.4.237.10.150.nip.io/ | minioadmin | minioadmin |
 | Nessie: http://nessie.4.237.10.150.nip.io/ | admin | - |
 
 -----
 ## Continue Codex: 
 `codex resume 019fb8a3-9cec-7f60-8d89-5ccb0c16fa42`
+
+----
+## Postgresql configuration for Airflow:
+
+- First, create Schema in postgresql for airflow (in prod, this should be created by airflow directly without this additional step).
+
+  ```sql
+  psql -U nessie [ where nessie is username of postgres]
+  -------------------
+  CREATE SCHEMA airflow;
+  CREATE USER airflow_user WITH PASSWORD 'airflow_pass';
+  GRANT ALL ON SCHEMA airflow TO airflow_user;
+  GRANT CONNECT ON DATABASE nessie TO airflow_user;
+  ```
+- So for Airflow we created new schema as `airflow` and new user as `airflow_user` and password: `airflow_pass`
+- `Airflow DB Connection String`: 
+  ```
+  postgresql+psycopg2://airflow_user:airflow_pass@finlake-postgres.finlake.svc.cluster.local:5432/nessie?options=-csearch_path%3Dairflow
+  ```
+- And, we need to add an init container to airflow pod for initialization of tables.
+
+- Example commands in psql:
+  1. `\du` -> List all users
+  2. `\l` -> List al DBs
+  3. `\dt` -> List all schemas

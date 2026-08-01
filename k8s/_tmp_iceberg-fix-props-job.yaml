@@ -1,0 +1,97 @@
+# One-off job — run once to patch existing Iceberg table properties.
+# Uses the already-pulled Spark image in local[1] mode (no executor pods).
+# Delete after it completes: kubectl delete -f k8s/iceberg-fix-props-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: iceberg-fix-table-props
+  namespace: finlake
+  labels:
+    app: finlake-spark
+    purpose: one-time-fix
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600   # auto-cleanup after 10 min
+  template:
+    spec:
+      serviceAccountName: spark-sa
+      restartPolicy: Never
+      containers:
+        - name: iceberg-fix
+          image: ghcr.io/saivarshithh/finlake-spark:latest
+          imagePullPolicy: Always
+          # Override entrypoint.sh entirely — run bash directly
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -e
+              cat > /tmp/fix_props.py << 'PYEOF'
+              from pyspark.sql import SparkSession
+
+              spark = (
+                  SparkSession.builder
+                  .appName("iceberg-fix-table-props")
+                  .master("local[1]")
+                  .config("spark.sql.extensions",
+                          "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+                  .config("spark.sql.catalog.nessie",
+                          "org.apache.iceberg.spark.SparkCatalog")
+                  .config("spark.sql.catalog.nessie.catalog-impl",
+                          "org.apache.iceberg.nessie.NessieCatalog")
+                  .config("spark.sql.catalog.nessie.uri",
+                          "http://finlake-nessie:19120/api/v1")
+                  .config("spark.sql.catalog.nessie.ref", "main")
+                  .config("spark.sql.catalog.nessie.authentication.type", "NONE")
+                  .config("spark.sql.catalog.nessie.warehouse",
+                          "s3://finlake-warehouse/warehouse")
+                  .config("spark.sql.catalog.nessie.io-impl",
+                          "org.apache.iceberg.aws.s3.S3FileIO")
+                  .config("spark.sql.catalog.nessie.s3.endpoint",
+                          "http://finlake-minio:9000")
+                  .config("spark.sql.catalog.nessie.s3.path-style-access", "true")
+                  .config("spark.sql.catalog.nessie.client.region", "us-east-1")
+                  .config("spark.sql.catalog.nessie.s3.access-key-id", "minioadmin")
+                  .config("spark.sql.catalog.nessie.s3.secret-access-key", "minioadmin")
+                  .getOrCreate()
+              )
+              spark.sparkContext.setLogLevel("WARN")
+
+              tables = [
+                  "nessie.finlake_bronze.raw_stock_prices",
+                  "nessie.finlake_bronze.dim_tickers",
+              ]
+
+              for table in tables:
+                  print(f"[fix] Patching properties on: {table}")
+                  spark.sql(f"""
+                      ALTER TABLE {table} SET TBLPROPERTIES (
+                          'write.parquet.compression-codec' = 'snappy',
+                          'write.distribution-mode' = 'none'
+                      )
+                  """)
+                  # Verify
+                  result = spark.sql(f"SHOW TBLPROPERTIES {table}").collect()
+                  for row in result:
+                      if row[0] in ("write.parquet.compression-codec", "write.distribution-mode"):
+                          print(f"[fix]   {row[0]} = {row[1]}")
+
+              spark.stop()
+              print("[fix] Done. All table properties updated.")
+              PYEOF
+              spark-submit --master local[1] /tmp/fix_props.py
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: minioadmin
+            - name: AWS_SECRET_ACCESS_KEY
+              value: minioadmin
+            - name: AWS_REGION
+              value: us-east-1
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
