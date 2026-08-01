@@ -103,6 +103,32 @@ def iceberg_initialisation(func=None, *, models=None):
                 print(f"[IcebergInitializer] Creating table if not exists: {table_name}")
                 # Execute DDL
                 spark.sql(ddl)
+
+                # Existing Iceberg tables are not changed by CREATE TABLE IF
+                # NOT EXISTS. Apply additive partition evolution when a model
+                # asks for it so older tables can be brought forward without
+                # dropping data or snapshots.
+                for partition_field in getattr(model_cls, "PARTITION_EVOLUTION", []):
+                    try:
+                        spark.sql(f"ALTER TABLE {table_name} ADD PARTITION FIELD {partition_field}")
+                        print(
+                            "[IcebergInitializer] Added partition field "
+                            f"{partition_field} to {table_name}"
+                        )
+                    except Exception as exc:
+                        message = str(exc).lower()
+                        already_exists = (
+                            "already exists" in message
+                            or "duplicate partition field" in message
+                            or "cannot add duplicate" in message
+                        )
+                        if already_exists:
+                            print(
+                                "[IcebergInitializer] Partition field already present "
+                                f"on {table_name}: {partition_field}"
+                            )
+                        else:
+                            raise
                 
             # 4. Proceed to the main function execution
             return f(*args, **kwargs)

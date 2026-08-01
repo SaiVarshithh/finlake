@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trino-ingress-2
+  namespace: finlake
+spec:
+  ingressClassName: nginx
+
+  rules:
+  - host: trino.4.237.10.150.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: finlake-trino-trino
+            port:
+              number: 8080
+
+
+###  Local Ingress
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: trino-ingress
+#   namespace: finlake
+# spec:
+#   ingressClassName: nginx
+#   rules:
+#   - host: trino.finlake.local
+#     http:
+#       paths:
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: finlake-trino-trino
+#             port:
+#               number: 8080

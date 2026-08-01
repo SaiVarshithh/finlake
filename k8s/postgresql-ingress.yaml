@@ -7,7 +7,7 @@ spec:
   ingressClassName: nginx
 
   rules:
-  - host: postgres.4.147.239.228.nip.io
+  - host: postgres.4.237.10.150.nip.io
     http:
       paths:
       - path: /
