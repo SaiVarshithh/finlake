@@ -75,3 +75,7 @@ trino-ingress       nginx       trino.finlake.local         4.237.10.150        
 | Airflow: http://airflow.4.237.10.150.nip.io/ | admin | exec into pod and cat standalone-password.txt |
 | MinIO: http://minio.4.237.10.150.nip.io/ | minioadmin | minioadmin |
 | Nessie: http://nessie.4.237.10.150.nip.io/ | admin | - |
+
+-----
+## Continue Codex: 
+`codex resume 019fb8a3-9cec-7f60-8d89-5ccb0c16fa42`
