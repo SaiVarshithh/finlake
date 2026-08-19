@@ -33,6 +33,13 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
 
+import warnings
+
+# Suppress internal yfinance pandas deprecation warnings (e.g. Timestamp.utcnow)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*utcnow is deprecated.*")
+warnings.filterwarnings("ignore", module="yfinance.*")
+
 import yfinance as yf
 
 from spark.handler import build_spark, iceberg_initialisation
