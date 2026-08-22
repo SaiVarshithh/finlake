@@ -15,8 +15,8 @@ Environment variables:
                              chunk. The whole [start, end) range is split
                              into chunks of this size and processed one at a
                              time so driver/executor memory stays bounded
-                             regardless of how many years are requested.
-                             Default: 30.
+                             within the supported 800-day run maximum.
+                             Default: 800 (the supported run maximum).
     FINLAKE_MARKET_TZ        Timezone used to resolve "today". Default:
                              Asia/Kolkata.
     MIN_SUCCESSFUL_TICKERS   Minimum distinct tickers that must land across
@@ -38,6 +38,9 @@ import yfinance as yf
 from spark.handler import build_spark, iceberg_initialisation
 from spark.model.constants import NSE_TICKERS
 from spark.model.models import DimTickers, RawStockPrices
+
+
+MAX_LOOKBACK_DAYS = 800
 
 
 def parse_positive_int(value: str | None, default: int, name: str) -> int:
@@ -75,6 +78,12 @@ def resolve_date_range() -> tuple[date, date]:
 
     if start_date >= end_date:
         raise ValueError(f"Invalid yfinance date range: start={start_date}, end={end_date}")
+    requested_days = (end_date - start_date).days
+    if requested_days > MAX_LOOKBACK_DAYS:
+        raise ValueError(
+            f"Requested {requested_days} calendar days; the supported maximum is "
+            f"{MAX_LOOKBACK_DAYS}. Split longer history into separate DAG runs."
+        )
     return start_date, end_date
 
 
@@ -204,7 +213,14 @@ def main() -> None:
         raise ValueError("No valid tickers resolved. Check FINLAKE_TICKERS.")
 
     start_date, end_date = resolve_date_range()
-    chunk_days = parse_positive_int(os.getenv("BACKFILL_CHUNK_DAYS"), 30, "BACKFILL_CHUNK_DAYS")
+    chunk_days = min(
+        parse_positive_int(
+            os.getenv("BACKFILL_CHUNK_DAYS"),
+            MAX_LOOKBACK_DAYS,
+            "BACKFILL_CHUNK_DAYS",
+        ),
+        MAX_LOOKBACK_DAYS,
+    )
     date_chunks = chunk_date_range(start_date, end_date, chunk_days)
 
     symbol_to_meta = {ticker["yfinance_symbol"]: ticker for ticker in tickers}
@@ -246,8 +262,8 @@ def main() -> None:
             print(f"[bronze_stock_writer] WARNING: no valid rows parsed for chunk {chunk_start}->{chunk_end}")
             continue
 
+        row_count = len(rows)
         df = spark.createDataFrame(rows, schema=RawStockPrices.get_schema())
-        row_count = df.count()
         print(
             f"[bronze_stock_writer] Chunk {chunk_index}/{len(date_chunks)}: parsed {row_count} rows "
             f"across {len(successful_tickers)} tickers"
@@ -294,7 +310,7 @@ def main() -> None:
     ]
     dim_df = spark.createDataFrame(dim_rows, schema=DimTickers.get_schema())
     DimTickers().write_dim_tickers_df(dim_df)
-    print(f"[bronze_stock_writer] Refreshed {DimTickers.TABLE_NAME} ({dim_df.count()} tickers)")
+    print(f"[bronze_stock_writer] Refreshed {DimTickers.TABLE_NAME} ({len(dim_rows)} tickers)")
 
     spark.stop()
 

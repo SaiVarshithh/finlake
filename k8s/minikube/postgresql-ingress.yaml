@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: postgres-ingress
+  namespace: finlake
+spec:
+  ingressClassName: nginx
+
+  rules:
+  - host: postgres.4.237.10.150.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: finlake-postgres
+            port:
+              number: 5432

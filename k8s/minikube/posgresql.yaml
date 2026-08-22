@@ -1,0 +1,70 @@
+# postgres/postgres-k8s.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: finlake
+data:
+  01-airflow.sql: |
+    CREATE USER airflow_user WITH PASSWORD 'airflow_pass';
+    CREATE SCHEMA IF NOT EXISTS airflow AUTHORIZATION airflow_user;
+    GRANT ALL PRIVILEGES ON DATABASE nessie TO airflow_user;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: finlake
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finlake-postgres
+  namespace: finlake
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: finlake-postgres } }
+  template:
+    metadata: { labels: { app: finlake-postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - { name: POSTGRES_USER, value: "nessie" }
+            - { name: POSTGRES_PASSWORD, value: "password" }
+            - { name: POSTGRES_DB, value: "nessie" }
+            - { name: PGDATA, value: "/var/lib/postgresql/data/pgdata" }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: init-scripts, mountPath: /docker-entrypoint-initdb.d }
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: postgres-pvc }
+        - name: init-scripts
+          configMap: { name: postgres-init-scripts }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: finlake-postgres, namespace: finlake }
+spec:
+  selector:
+    app: finlake-postgres
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
