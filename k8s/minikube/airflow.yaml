@@ -75,8 +75,8 @@ spec:
         - name: airflow
           # Replace <SHA> with the commit SHA tag pushed by docker.yml after
           # each build — same pattern as the Spark image in spark-k8s.yaml.
-          image: ghcr.io/saivarshithh/finlake-airflow:latest
-          imagePullPolicy: Always
+          image: ghcr.io/saivarshithh/finlake-airflow:d5d76b6ab3b6b6c8d5aac61c5634e1c1caaefac1
+          imagePullPolicy: IfNotPresent
           command: ["/usr/bin/bash", "-c"]
           args:
             - |
@@ -98,11 +98,19 @@ spec:
               value: "true"
             - name: AIRFLOW__CORE__EXECUTOR
               value: "LocalExecutor"
+            - name: AIRFLOW__CORE__PARALLELISM
+              value: "8"
+            - name: AIRFLOW__SCHEDULER__PARSING_PROCESSES
+              value: "1"
+            - name: AIRFLOW__WEBSERVER__WORKERS
+              value: "2"
             # ── PostgreSQL backend — nessie DB, airflow schema (search_path) ──────
             - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
               value: "postgresql+psycopg2://airflow_user:airflow_pass@finlake-postgres.finlake.svc.cluster.local:5432/nessie?options=-csearch_path%3Dairflow"
             - name: AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS
               value: "false"
+            - name: FINLAKE_SPARK_IMAGE
+              value: ghcr.io/saivarshithh/finlake-spark:d5d76b6ab3b6b6c8d5aac61c5634e1c1caaefac1
           ports:
             - containerPort: 8080
               name: http
@@ -122,10 +130,10 @@ spec:
           resources:
             requests:
               cpu: "200m"
-              memory: "768Mi"
+              memory: "1Gi"
             limits:
               cpu: "1"
-              memory: "1536Mi"
+              memory: "2Gi"
           readinessProbe:
             httpGet:
               path: /health
@@ -153,8 +161,8 @@ spec:
       # ── Init container: run db migrations before the main pod starts ─────────
       initContainers:
         - name: airflow-db-init
-          image: ghcr.io/saivarshithh/finlake-airflow:latest
-          imagePullPolicy: Always
+          image: ghcr.io/saivarshithh/finlake-airflow:d5d76b6ab3b6b6c8d5aac61c5634e1c1caaefac1
+          imagePullPolicy: IfNotPresent
           command: ["airflow", "db", "migrate"]
           env:
             - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
