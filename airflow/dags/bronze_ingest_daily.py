@@ -93,12 +93,11 @@ SPARK_EXTRA_ARGS = " ".join(
         # the ~1 free core we have on any given node.
         "--conf",
         "spark.kubernetes.executor.request.cores=500m",
+        "--conf",
+        "spark.kubernetes.executor.limit.cores=1",
         # SNAPPY is heap-friendly: fixed 32KB buffer vs GZIP's multi-MB ByteArrayOutputStream
         "--conf",
         "spark.sql.parquet.compression.codec=snappy",
-        # fanout.enabled=false: prefer sorted writes (one writer at a time per partition)
-        "--conf",
-        "spark.sql.iceberg.fanout.enabled=false",
         # 200 shuffle partitions made sense as a ceiling, but with 1 executor /
         # 1 core every partition is a sequential task -- 200 of them is 200x the
         # per-task bookkeeping (codec instances, task metadata) for no
@@ -106,7 +105,7 @@ SPARK_EXTRA_ARGS = " ".join(
         # partitions automatically, so a lower starting count plus AQE is both
         # lighter on this executor's heap and self-tuning.
         "--conf",
-        "spark.sql.shuffle.partitions=48",
+        "spark.sql.shuffle.partitions=16",
         "--conf",
         "spark.sql.adaptive.enabled=true",
         "--conf",
@@ -277,10 +276,10 @@ def submit_bronze_stock_job(**context) -> None:
         # SAME process that runs yfinance + pandas + Python row-building in
         # bronze_stock_writer.py, on top of the JVM. 1g driver heap inside a
         # 1Gi pod limit left ~0 headroom for that Python-side memory -- raised
-        # both. BACKFILL_CHUNK_DAYS (job env) bounds how much pandas data is
-        # ever resident at once, independent of total backfill range.
+        # both. The job hard-limits a run to 800 days and defaults to one
+        # download/write, which is small for daily OHLCV at this ticker count.
         client.V1EnvVar(name="SPARK_DRIVER_MEMORY", value="1200m"),
-        client.V1EnvVar(name="SPARK_EXECUTOR_MEMORY", value="2g"),
+        client.V1EnvVar(name="SPARK_EXECUTOR_MEMORY", value="640m"),
         client.V1EnvVar(name="SPARK_EXECUTOR_CORES", value="1"),
         client.V1EnvVar(name="SPARK_EXTRA_ARGS", value=SPARK_EXTRA_ARGS),
         client.V1EnvVar(name="AWS_ACCESS_KEY_ID", value="minioadmin"),
@@ -291,11 +290,9 @@ def submit_bronze_stock_job(**context) -> None:
         client.V1EnvVar(name="AIRFLOW_RUN_ID", value=context["run_id"]),
         client.V1EnvVar(name="FINLAKE_MARKET_TZ", value="Asia/Kolkata"),
         client.V1EnvVar(name="LOOKBACK_DAYS", value=str(lookback_days)),
-        # Bounds how many days of yfinance data are held in pandas/Python-list
-        # form at once inside bronze_stock_writer.py, regardless of how long
-        # the total requested range is. See BACKFILL_CHUNK_DAYS in that job's
-        # docstring.
-        client.V1EnvVar(name="BACKFILL_CHUNK_DAYS", value=os.getenv("FINLAKE_BACKFILL_CHUNK_DAYS", "30")),
+        # One chunk avoids repeated API calls and Spark commits. Operators can
+        # lower this value, but the job never accepts more than 800 total days.
+        client.V1EnvVar(name="BACKFILL_CHUNK_DAYS", value=os.getenv("FINLAKE_BACKFILL_CHUNK_DAYS", "800")),
     ]
     if tickers_csv:
         env.append(client.V1EnvVar(name="FINLAKE_TICKERS", value=tickers_csv))
@@ -339,9 +336,8 @@ def submit_bronze_stock_job(**context) -> None:
 
     print(f"Submitting Bronze stock ingest for lookback_days={lookback_days}, tickers={tickers_csv or 'default'}")
     create_job(batch_api, body)
-    # 1800s was sized for the ~20-day daily run. A 2-year backfill processes
-    # ~24 sequential 30-day chunks (yfinance download + Spark write each) --
-    # give it real headroom instead of failing the DAG on a slow but healthy job.
+    # Leave headroom for the one-time rewrite of old day/ticker files under the
+    # evolved monthly partition spec as well as slow yfinance responses.
     wait_for_job(batch_api, core_api, name, timeout_seconds=13500)
 
 
@@ -352,7 +348,7 @@ with DAG(
     start_date=pendulum.datetime(2026, 1, 1, tz="Asia/Kolkata"),
     catchup=False,
     max_active_runs=1,
-    dagrun_timeout=timedelta(hours=4),  # multi-year backfills run many sequential yfinance+write chunks
+    dagrun_timeout=timedelta(hours=4),  # includes first-run partition evolution and file rewrites
     default_args={"owner": "finlake", "retries": 0},
     params={
         "lookback_days": Param(
@@ -362,8 +358,7 @@ with DAG(
             maximum=800,
             description=(
                 "Calendar days to pull ending at tomorrow in Asia/Kolkata. "
-                "Use 183+ for a backfill -- the job processes it in "
-                "BACKFILL_CHUNK_DAYS-sized chunks internally, so 730 (2 years) is safe."
+                "The supported hard limit is 800 days; 366 runs as one bounded download/write."
             ),
         )
     },

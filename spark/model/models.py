@@ -17,8 +17,14 @@ app_config = get_app_config()
 
 class RawStockPrices(SparkHandler):
     TABLE_NAME = f"{app_config.catalog}.finlake_bronze.raw_stock_prices"
-    PARTITION_BY = ["days(trade_date)", "ticker"]
-    PARTITION_EVOLUTION = ["days(trade_date)", "ticker"]
+    # Daily OHLCV has one row per ticker/day. Month partitions avoid creating
+    # nearly one Parquet partition and file per input row.
+    PARTITION_BY = ["months(trade_date)"]
+    PARTITION_EVOLUTION = [
+        ("add", "months(trade_date)"),
+        ("drop", "days(trade_date)"),
+        ("drop", "ticker"),
+    ]
     TABLE_PROPERTIES = {
         "format-version": "2",
         "write.parquet.compression-codec": "snappy",
@@ -26,6 +32,8 @@ class RawStockPrices(SparkHandler):
         # Each task gets data for fewer unique partitions → fewer simultaneous compressors.
         # 'none' was WRONG — it forces FanoutDataWriter with ALL partitions open at once.
         "write.distribution-mode": "hash",
+        "write.spark.fanout.enabled": "false",
+        "write.target-file-size-bytes": str(64 * 1024 * 1024),
     }
 
     def __init__(self):
@@ -39,33 +47,28 @@ class RawStockPrices(SparkHandler):
         return df
 
     def write_raw_stock_prices_df(self, df: DataFrame) -> None:
-        """
-        Idempotent write via dynamic partition overwrite.
+        """Idempotently upsert a download on (ticker, trade_date).
 
-        Replaces MERGE INTO (which reads + joins ALL matching target partitions)
-        with a much cheaper pattern:
-          1. Deduplicate source rows on (ticker, trade_date)
-          2. Repartition by ticker — ensures each Spark task writes 1 ticker's data.
-             FanoutDataWriter then opens at most N_unique_dates compressors per task
-             (e.g. 60 for 60-day lookback, 365 for a year) instead of
-             N_tickers × N_dates (6300+ for 105 tickers × 60 days).
-          3. Dynamic overwrite atomically replaces only the (date, ticker)
-             partition files that appear in the new data — other partitions
-             are untouched. Re-running is fully idempotent.
+        Dynamic partition overwrite is unsafe with monthly partitions because
+        a daily run could replace the whole month. MERGE changes only matching
+        business keys. Iceberg hash-clusters the output by month, allowing the
+        non-fanout writer to keep one Parquet compressor open at a time.
         """
-        from pyspark.sql import functions as F  # noqa: PLC0415
-
-        (
-            df.dropDuplicates(["ticker", "trade_date"])
-            # One Spark task per ticker: each task handles 1 ticker × N dates.
-            # FanoutDataWriter opens at most N_dates compressors (not N_tickers × N_dates).
-            .repartition(F.col("ticker"))
-            .write.format("iceberg")
-            .option("check-nullability", "false")
-            .mode("overwrite")
-            .option("overwrite-mode", "dynamic")
-            .save(self.TABLE_NAME)
-        )
+        source_view = "_finlake_raw_stock_prices_source"
+        df.dropDuplicates(["ticker", "trade_date"]).createOrReplaceTempView(source_view)
+        try:
+            self.spark.sql(
+                f"""
+                MERGE INTO {self.TABLE_NAME} AS target
+                USING {source_view} AS source
+                ON target.ticker = source.ticker
+                   AND target.trade_date = source.trade_date
+                WHEN MATCHED THEN UPDATE SET *
+                WHEN NOT MATCHED THEN INSERT *
+                """
+            )
+        finally:
+            self.spark.catalog.dropTempView(source_view)
 
     @classmethod
     def get_schema(cls):

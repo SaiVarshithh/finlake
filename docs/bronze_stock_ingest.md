@@ -31,7 +31,7 @@ Variable name:
 finlake_tickers
 ```
 
-If `finlake_tickers` is not set, the Spark job falls back to the 20-ticker
+If `finlake_tickers` is not set, the Spark job falls back to the full 105-ticker
 reference list in `spark/model/constants.py`.
 
 When manually triggering the DAG, set `lookback_days` in the Airflow trigger
@@ -69,6 +69,23 @@ BACKFILL_END=2026-07-01
 ```
 
 `BACKFILL_END` follows yfinance's convention and is exclusive.
+
+## Capacity and storage layout
+
+The supported maximum for one DAG run is **800 calendar days**. The writer
+enforces this for both `LOOKBACK_DAYS` and explicit `BACKFILL_START` /
+`BACKFILL_END` ranges. A 366-day request is downloaded and merged in one chunk
+by default.
+
+For all 105 reference tickers, the ceiling is at most 84,000 rows before
+weekends and exchange holidays are removed. For 20 tickers it is at most
+16,000 rows.
+
+`raw_stock_prices` uses Iceberg `months(trade_date)` partitioning. Existing
+day/ticker-partitioned files remain readable through Iceberg partition
+evolution; new writes use monthly partitions. Writes use hash distribution,
+Snappy compression, and the clustered writer (`write.spark.fanout.enabled=false`)
+so an executor does not retain one Parquet compressor per ticker/day.
 
 ## Verification
 

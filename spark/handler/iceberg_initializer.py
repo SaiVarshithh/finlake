@@ -104,28 +104,40 @@ def iceberg_initialisation(func=None, *, models=None):
                 # Execute DDL
                 spark.sql(ddl)
 
-                # Existing Iceberg tables are not changed by CREATE TABLE IF
-                # NOT EXISTS. Apply additive partition evolution when a model
-                # asks for it so older tables can be brought forward without
-                # dropping data or snapshots.
-                for partition_field in getattr(model_cls, "PARTITION_EVOLUTION", []):
+                # CREATE TABLE IF NOT EXISTS does not reconcile an existing
+                # table. Keep write properties current on every job start.
+                if properties:
+                    props_list = [f"'{k}'='{v}'" for k, v in properties.items()]
+                    spark.sql(f"ALTER TABLE {table_name} SET TBLPROPERTIES ({', '.join(props_list)})")
+
+                # Partition evolution is metadata-only. Old files remain
+                # readable using their old spec; new files use the latest one.
+                for operation, partition_field in getattr(model_cls, "PARTITION_EVOLUTION", []):
+                    if operation not in {"add", "drop"}:
+                        raise ValueError(f"Unsupported partition evolution operation: {operation}")
                     try:
-                        spark.sql(f"ALTER TABLE {table_name} ADD PARTITION FIELD {partition_field}")
+                        spark.sql(
+                            f"ALTER TABLE {table_name} {operation.upper()} PARTITION FIELD {partition_field}"
+                        )
+                        completed_action = {"add": "Added", "drop": "Dropped"}[operation]
                         print(
-                            "[IcebergInitializer] Added partition field "
-                            f"{partition_field} to {table_name}"
+                            f"[IcebergInitializer] {completed_action} partition field "
+                            f"{partition_field} on {table_name}"
                         )
                     except Exception as exc:
                         message = str(exc).lower()
-                        already_exists = (
+                        idempotent_error = (
                             "already exists" in message
                             or "duplicate partition field" in message
                             or "cannot add duplicate" in message
+                            or "cannot find partition field" in message
+                            or "no such partition field" in message
+                            or "not a partition field" in message
                         )
-                        if already_exists:
+                        if idempotent_error:
                             print(
-                                "[IcebergInitializer] Partition field already present "
-                                f"on {table_name}: {partition_field}"
+                                "[IcebergInitializer] Partition evolution already applied "
+                                f"on {table_name}: {operation} {partition_field}"
                             )
                         else:
                             raise
