@@ -75,7 +75,7 @@ spec:
         - name: airflow
           # Replace <SHA> with the commit SHA tag pushed by docker.yml after
           # each build — same pattern as the Spark image in spark-k8s.yaml.
-          image: ghcr.io/saivarshithh/finlake-airflow:d5d76b6ab3b6b6c8d5aac61c5634e1c1caaefac1
+          image: ghcr.io/saivarshithh/finlake-airflow:b11d37305a6302ff4dc4db32c7e7aec4d47431d3
           imagePullPolicy: IfNotPresent
           command: ["/usr/bin/bash", "-c"]
           args:
@@ -110,23 +110,12 @@ spec:
             - name: AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS
               value: "false"
             - name: FINLAKE_SPARK_IMAGE
-              value: ghcr.io/saivarshithh/finlake-spark:d5d76b6ab3b6b6c8d5aac61c5634e1c1caaefac1
+              value: ghcr.io/saivarshithh/finlake-spark:b11d37305a6302ff4dc4db32c7e7aec4d47431d3
           ports:
             - containerPort: 8080
               name: http
-          volumeMounts:
-            - name: airflow-dags
-              mountPath: /opt/airflow/dags/sample_dag.py
-              subPath: sample_dag.py
-              readOnly: true
-            - name: airflow-dags
-              mountPath: /opt/airflow/dags/finlake_iceberg_spark_dag.py
-              subPath: finlake_iceberg_spark_dag.py
-              readOnly: true
-            - name: airflow-dags
-              mountPath: /opt/airflow/dags/bronze_ingest_daily.py
-              subPath: bronze_ingest_daily.py
-              readOnly: true
+          # DAGs are baked into the immutable Airflow image. ConfigMap mounts
+          # here would override those files and can silently run stale code.
           resources:
             requests:
               cpu: "200m"
@@ -161,7 +150,7 @@ spec:
       # ── Init container: run db migrations before the main pod starts ─────────
       initContainers:
         - name: airflow-db-init
-          image: ghcr.io/saivarshithh/finlake-airflow:d5d76b6ab3b6b6c8d5aac61c5634e1c1caaefac1
+          image: ghcr.io/saivarshithh/finlake-airflow:b11d37305a6302ff4dc4db32c7e7aec4d47431d3
           imagePullPolicy: IfNotPresent
           command: ["airflow", "db", "migrate"]
           env:
@@ -174,10 +163,6 @@ spec:
             limits:
               cpu: "1"
               memory: "1Gi"
-      volumes:
-        - name: airflow-dags
-          configMap:
-            name: finlake-airflow-dags
       # Uncomment if finlake-airflow image is private on GHCR:
       # imagePullSecrets:
       #   - name: ghcr-secret

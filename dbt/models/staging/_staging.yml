@@ -1,0 +1,11 @@
+version: 2
+
+models:
+  - name: stg_stock_prices
+    description: Normalized Bronze stock prices used as the input to Silver models.
+    columns:
+      - name: ticker
+        description: Uppercase, trimmed ticker.
+      - name: exchange
+        description: Uppercase, trimmed exchange code.
+

@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: clean_prices
+    description: Deduplicated daily stock prices with one latest record per ticker and trade date.
+    columns:
+      - name: ticker
+        description: Exchange ticker without the yfinance suffix.
+        data_tests:
+          - not_null
+      - name: exchange
+        description: Exchange on which the ticker trades.
+        data_tests:
+          - not_null
+      - name: trade_date
+        description: Trading date represented by this observation.
+        data_tests:
+          - not_null
+      - name: open
+        data_tests:
+          - not_null
+      - name: high
+        data_tests:
+          - not_null
+      - name: low
+        data_tests:
+          - not_null
+      - name: close
+        data_tests:
+          - not_null
+      - name: volume
+        data_tests:
+          - not_null
+

@@ -1,0 +1,15 @@
+finlake:
+  target: dev
+  outputs:
+    dev:
+      type: trino
+      method: none
+      host: "{{ env_var('DBT_TRINO_HOST', 'finlake-trino-trino.finlake.svc.cluster.local') }}"
+      port: "{{ env_var('DBT_TRINO_PORT', '8080') | int }}"
+      user: "{{ env_var('DBT_TRINO_USER', 'finlake_dbt') }}"
+      database: "{{ env_var('DBT_TRINO_CATALOG', 'iceberg') }}"
+      schema: "{{ env_var('DBT_TRINO_SCHEMA', 'finlake') }}"
+      http_scheme: "{{ env_var('DBT_TRINO_HTTP_SCHEME', 'http') }}"
+      threads: 2
+      retries: 2
+

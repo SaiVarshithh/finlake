@@ -1,0 +1,6 @@
+target/
+logs/
+dbt_packages/
+.user.yml
+*.pyc
+__pycache__/
