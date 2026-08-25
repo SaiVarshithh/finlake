@@ -75,7 +75,7 @@ spec:
         - name: airflow
           # Replace <SHA> with the commit SHA tag pushed by docker.yml after
           # each build — same pattern as the Spark image in spark-k8s.yaml.
-          image: ghcr.io/saivarshithh/finlake-airflow:b11d37305a6302ff4dc4db32c7e7aec4d47431d3
+          image: ghcr.io/saivarshithh/finlake-airflow:e7b1a1b8394e081b7f7905a83b8355fdaf7087b7
           imagePullPolicy: IfNotPresent
           command: ["/usr/bin/bash", "-c"]
           args:
@@ -110,7 +110,7 @@ spec:
             - name: AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS
               value: "false"
             - name: FINLAKE_SPARK_IMAGE
-              value: ghcr.io/saivarshithh/finlake-spark:b11d37305a6302ff4dc4db32c7e7aec4d47431d3
+              value: ghcr.io/saivarshithh/finlake-spark:e7b1a1b8394e081b7f7905a83b8355fdaf7087b7
           ports:
             - containerPort: 8080
               name: http
@@ -150,7 +150,7 @@ spec:
       # ── Init container: run db migrations before the main pod starts ─────────
       initContainers:
         - name: airflow-db-init
-          image: ghcr.io/saivarshithh/finlake-airflow:b11d37305a6302ff4dc4db32c7e7aec4d47431d3
+          image: ghcr.io/saivarshithh/finlake-airflow:e7b1a1b8394e081b7f7905a83b8355fdaf7087b7
           imagePullPolicy: IfNotPresent
           command: ["airflow", "db", "migrate"]
           env:
