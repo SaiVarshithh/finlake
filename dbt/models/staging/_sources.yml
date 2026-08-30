@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: Raw Iceberg tables written by the Spark ingestion jobs.
+    database: "{{ env_var('DBT_TRINO_CATALOG', 'iceberg') }}"
+    schema: "{{ env_var('DBT_BRONZE_SCHEMA', 'finlake_bronze') }}"
+    tables:
+      - name: raw_stock_prices
+        description: One raw daily OHLCV observation per ticker and trade date.
+        columns:
+          - name: ticker
+            description: Exchange ticker without the yfinance suffix.
+            data_tests:
+              - not_null
+          - name: trade_date
+            description: Trading date represented by this observation.
+            data_tests:
+              - not_null
+          - name: ingestion_ts
+            description: Time at which Spark ingested the observation.
+            data_tests:
+              - not_null

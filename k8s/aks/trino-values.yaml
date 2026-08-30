@@ -11,7 +11,7 @@ catalogs:
     iceberg.catalog.type=nessie
     iceberg.nessie-catalog.uri=http://finlake-nessie:19120/api/v2
     iceberg.nessie-catalog.ref=main
-    iceberg.nessie-catalog.default-warehouse-dir=s3://warehouse/
+    iceberg.nessie-catalog.default-warehouse-dir=s3://finlake-warehouse/warehouse/
 
     fs.native-s3.enabled=true
     s3.endpoint=http://finlake-minio:9000

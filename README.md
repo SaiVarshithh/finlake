@@ -1,29 +1,36 @@
 # FinLake — BFSI Data Platform
 
-FinLake is a modern financial data platform designed for processing BFSI (Banking, Financial Services, and Insurance) transaction workloads. This repository implements an orchestrator-led lakehouse ingestion pipeline using **Apache Spark**, **Apache Iceberg**, **Project Nessie**, and **MinIO**, fully running on **Kubernetes**.
+FinLake is a financial lakehouse running on Kubernetes. Airflow orchestrates
+Spark ingestion and dbt transformations; Trino executes dbt SQL against Apache
+Iceberg tables cataloged by Project Nessie and stored in MinIO.
 
 ---
 
-## Ingest Pipeline Overview
+## Stock Pipeline Overview
 
-At the core of the platform is an Airflow DAG named `finlake_iceberg_spark_ingest`. When triggered, the end-to-end ingestion pipeline performs the following steps:
+The production learning path is the Airflow DAG
+`finlake_bronze_stock_prices_daily`. A run performs these steps:
 
 1. **Warehouse Initialization:** Spawns a Kubernetes pod to ensure the MinIO bucket `finlake-warehouse` exists.
-2. **Spark Job Submission:** Submits a Kubernetes Job to run `spark-submit` for the ingestion script.
-3. **Distributed Processing:** Launches a dedicated Spark driver pod which coordinates executor pods to distribute the workload.
-4. **Lakehouse Write:** Generates and writes 100,000 deterministic test transaction records directly to the target Iceberg table: `nessie.finlake_bronze.transactions_test`.
+2. **Bronze Ingestion:** Runs `bronze_stock_writer.py` as a Spark Kubernetes Job and idempotently merges daily OHLCV rows into `nessie.finlake_bronze.raw_stock_prices`.
+3. **dbt Silver Build:** Starts a short-lived dbt Kubernetes Job after Bronze succeeds.
+4. **Trino Transformation:** dbt sends SQL to Trino, which creates `iceberg.finlake_silver.clean_prices` using the Bronze Iceberg data.
+5. **Quality Gates:** dbt runs source, uniqueness, required-field, and OHLCV validity tests. Any failure fails the Airflow task and DAG run.
 
 ### Data Platform Configurations
 
 * **Iceberg Warehouse Path:** `s3://finlake-warehouse/warehouse`
 * **Nessie Metadata Catalog:** Host URL `http://finlake-nessie:19120/api/v1` (tracks table history and version branches)
 * **MinIO Object Storage:** API Endpoint `http://finlake-minio:9000` (stores the raw data files and metadata specifications)
+* **Trino Catalog:** `iceberg` (reads and writes Iceberg through Nessie)
 
 ---
 
 ## Deployment & Cluster Operations
 
-This project utilizes a automated CI/CD setup. All container images (Spark, Airflow) are built and pushed to the registry automatically using **GitHub Workflows** on each commit. To deploy or update your components in the Kubernetes cluster, you only need to apply the manifests and trigger rollouts.
+GitHub Actions builds and pushes immutable commit-SHA and `latest` tags for the
+Spark, Airflow, and dbt images. Kubernetes deployments should use the SHA tag;
+the Airflow DAG derives the matching dbt SHA from `FINLAKE_SPARK_IMAGE`.
 
 ### 1. Apply Manifests & Restart Services
 
@@ -31,26 +38,29 @@ Apply the Spark RBAC permissions, refresh the Airflow deployments, and restart A
 
 ```powershell
 # Apply Kubernetes manifests
-kubectl apply -f spark/spark-rbac.yaml
-kubectl apply -f airflow/airflow-k8s.yaml
+kubectl apply -f k8s/minikube/spark-rbac.yaml
+kubectl apply -f k8s/minikube/airflow.yaml
 
 # Restart Airflow to pull the latest image version from the registry
 kubectl rollout restart deploy/finlake-airflow -n finlake
 ```
 
-### 2. Monitor Spark Job & Pod Logs
+### 2. Monitor Pipeline Jobs
 
-Once you trigger the `finlake_iceberg_spark_ingest` DAG in the Airflow UI, you can inspect the running Kubernetes pods and fetch executor logs:
+After triggering `finlake_bronze_stock_prices_daily`, inspect both stages:
 
 ```powershell
 # Track active Spark job execution and driver pod state
-kubectl get jobs,pods -n finlake -l spark-pipeline=iceberg-transactions
+kubectl get jobs,pods -n finlake -l spark-pipeline=bronze-stock-prices
 
 # View logs for the Spark driver pod
 kubectl logs -n finlake -l app=finlake-spark,spark-role=driver --tail=200
 
 # Monitor dynamically scaled executor pods
 kubectl get pods -n finlake -l spark-role=executor
+
+# View the dbt build and test output
+kubectl logs -n finlake -l app=finlake-dbt --tail=200
 ```
 
 ---
@@ -61,25 +71,28 @@ The system is split into four decoupled components designed to scale independent
 
 ```mermaid
 graph TD
-    A[Airflow DAG] -->|Task 1: Create Bucket| B(MinIO API)
-    A -->|Task 2: Submit K8s Job| C[Spark Driver Pod]
+    A[Airflow DAG] -->|1. Ensure Bucket| B[MinIO]
+    A -->|2. Submit Bronze Job| C[Spark Driver Pod]
     C -->|Creates| D[Spark Executor Pods]
-    C & D -->|Registers metadata| E[Nessie Catalog]
-    C & D -->|Writes Parquet Files| F[MinIO S3 Bucket]
+    C & D -->|Writes Bronze| E[Iceberg via Nessie and MinIO]
+    A -->|3. Submit dbt Job| F[dbt Pod]
+    F -->|Compiled SQL and tests| G[Trino]
+    G -->|Reads Bronze and writes Silver| E
 ```
 
 ### A. Orchestration (Airflow)
 * The pipeline starts inside an Airflow environment running in **Standalone Mode** (Scheduler, Executor, and Webserver run in a single process inside a single pod for simplified resource footprint).
 * The custom [Dockerfile](./airflow/Dockerfile) builds upon Airflow `2.9.3`, pre-installing the required dependencies.
 * The [Airflow Deployment](./airflow/airflow-k8s.yaml) sets up the pod running `airflow standalone`.
-* The [Spark Job DAG](./airflow/dags/finlake_iceberg_spark_dag.py) coordinates two sequential tasks:
+* The [stock pipeline DAG](./airflow/dags/bronze_ingest_daily.py) coordinates three sequential tasks:
   1. **MinIO Bucket Creation (`mc`):** Executes a startup job using the MinIO client image to run the bucket check command:
      ```bash
      mc alias set finlake http://finlake-minio:9000 minioadmin minioadmin && \
      mc mb --ignore-existing finlake/finlake-warehouse && \
      mc ls finlake/finlake-warehouse
      ```
-  2. **Job Submission:** Submits a Kubernetes job pointing to the PySpark entrypoint. This task only launches once the bucket check returns successfully.
+  2. **Bronze Job:** Submits the Spark stock ingestion and waits for its driver and executor work to succeed.
+  3. **Silver Job:** Runs `dbt build --fail-fast` in a bounded, temporary pod and streams its model and test logs into Airflow.
 
 ### B. Distributed Processing (Spark)
 * When the DAG triggers `spark-submit`, a Spark Driver pod starts up. The driver reads the custom [entrypoint.sh](./spark/entrypoint.sh) to handle the startup sequence.

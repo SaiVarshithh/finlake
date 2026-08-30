@@ -23,6 +23,9 @@ jobs:
           - image: finlake-airflow
             context: airflow
             dockerfile: airflow/Dockerfile
+          - image: finlake-dbt
+            context: dbt
+            dockerfile: dbt/Dockerfile
 
     steps:
       - name: Checkout source
@@ -42,8 +45,8 @@ jobs:
           echo "image=ghcr.io/$OWNER/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
 
       # Build the images using the specified context and Dockerfile.
-      # Spark image uses the repository root context to access config/ and spark/ modules,
-      # while Airflow remains self-contained inside its airflow/ folder.
+      # Spark uses the root context to access config/ and spark/ modules.
+      # Airflow and dbt remain self-contained in their own folders.
       - name: Build image
         run: |
           docker build \
@@ -51,6 +54,16 @@ jobs:
             -t ${{ steps.meta.outputs.image }}:latest \
             -f ${{ matrix.dockerfile }} \
             ${{ matrix.context }}
+
+      - name: Validate dbt project
+        if: matrix.image == 'finlake-dbt'
+        run: docker run --rm ${{ steps.meta.outputs.image }}:${{ github.sha }} parse
+
+      - name: Validate Airflow DAG imports
+        if: matrix.image == 'finlake-airflow'
+        run: |
+          docker run --rm ${{ steps.meta.outputs.image }}:${{ github.sha }} \
+            bash -c "airflow db migrate && airflow dags list"
 
       - name: Push image
         run: |

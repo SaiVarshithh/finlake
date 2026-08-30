@@ -1,9 +1,10 @@
 """
 Daily Bronze stock-price ingest.
 
-This DAG submits the `bronze_stock_writer.py` Spark job on Kubernetes. Tickers
-come from the Airflow Variable `finlake_tickers`; `lookback_days` is exposed as
-a DAG parameter in the Airflow trigger UI.
+This DAG submits the `bronze_stock_writer.py` Spark job on Kubernetes and, once
+Bronze succeeds, runs the tested dbt Silver and Gold build through Trino.
+Tickers come from the Airflow Variable `finlake_tickers`; `lookback_days` is
+exposed as a DAG parameter in the Airflow trigger UI.
 """
 
 from __future__ import annotations
@@ -29,6 +30,10 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 NAMESPACE = os.getenv("FINLAKE_K8S_NAMESPACE", "finlake")
 SPARK_IMAGE = os.getenv("FINLAKE_SPARK_IMAGE", "ghcr.io/saivarshithh/finlake-spark:latest")
+DEFAULT_DBT_IMAGE = SPARK_IMAGE.replace("/finlake-spark:", "/finlake-dbt:", 1)
+if DEFAULT_DBT_IMAGE == SPARK_IMAGE:
+    DEFAULT_DBT_IMAGE = "ghcr.io/saivarshithh/finlake-dbt:latest"
+DBT_IMAGE = os.getenv("FINLAKE_DBT_IMAGE", DEFAULT_DBT_IMAGE)
 MINIO_CLIENT_IMAGE = os.getenv("FINLAKE_MINIO_CLIENT_IMAGE", "quay.io/minio/mc:latest")
 
 SPARK_EXTRA_ARGS = " ".join(
@@ -341,9 +346,75 @@ def submit_bronze_stock_job(**context) -> None:
     wait_for_job(batch_api, core_api, name, timeout_seconds=13500)
 
 
+def run_dbt_analytics_build(**context) -> None:
+    """Build and test dbt seeds, Silver, and Gold after Bronze succeeds."""
+    load_kubernetes_config()
+    batch_api = client.BatchV1Api()
+    core_api = client.CoreV1Api()
+    name = job_name("finlake-dbt-build", context["run_id"])
+
+    env = [
+        client.V1EnvVar(name="DBT_TRINO_HOST", value="finlake-trino-trino.finlake.svc.cluster.local"),
+        client.V1EnvVar(name="DBT_TRINO_PORT", value="8080"),
+        client.V1EnvVar(name="DBT_TRINO_USER", value="finlake_dbt"),
+        client.V1EnvVar(name="DBT_TRINO_CATALOG", value="iceberg"),
+        client.V1EnvVar(name="DBT_TRINO_SCHEMA", value="finlake"),
+        client.V1EnvVar(name="DBT_BRONZE_SCHEMA", value="finlake_bronze"),
+        client.V1EnvVar(name="DBT_TRINO_HTTP_SCHEME", value="http"),
+        client.V1EnvVar(name="DBT_SEND_ANONYMOUS_USAGE_STATS", value="false"),
+    ]
+
+    body = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name=name,
+            namespace=NAMESPACE,
+            labels={"app": "finlake-dbt", "dbt-layer": "analytics"},
+        ),
+        spec=client.V1JobSpec(
+            backoff_limit=0,
+            ttl_seconds_after_finished=3600,
+            active_deadline_seconds=1800,
+            template=client.V1PodTemplateSpec(
+                metadata=client.V1ObjectMeta(
+                    labels={"app": "finlake-dbt", "dbt-layer": "analytics"}
+                ),
+                spec=client.V1PodSpec(
+                    restart_policy="Never",
+                    containers=[
+                        client.V1Container(
+                            name="dbt",
+                            image=DBT_IMAGE,
+                            image_pull_policy=(
+                                "Always" if DBT_IMAGE.endswith(":latest") else "IfNotPresent"
+                            ),
+                            args=[
+                                "build",
+                                "--project-dir",
+                                "/opt/finlake/dbt",
+                                "--profiles-dir",
+                                "/opt/finlake/dbt",
+                                "--fail-fast",
+                            ],
+                            env=env,
+                            resources=client.V1ResourceRequirements(
+                                requests={"cpu": "100m", "memory": "128Mi"},
+                                limits={"cpu": "500m", "memory": "512Mi"},
+                            ),
+                        )
+                    ],
+                ),
+            ),
+        ),
+    )
+
+    print(f"Submitting dbt Silver and Gold build with image={DBT_IMAGE}")
+    create_job(batch_api, body)
+    wait_for_job(batch_api, core_api, name, timeout_seconds=1800)
+
+
 with DAG(
     dag_id="finlake_bronze_stock_prices_daily",
-    description="Daily yfinance NSE/BSE OHLCV ingest into Iceberg Bronze raw_stock_prices.",
+    description="Ingest daily stock prices and build tested dbt Silver and Gold tables.",
     schedule="30 18 * * 1-5",
     start_date=pendulum.datetime(2026, 1, 1, tz="Asia/Kolkata"),
     catchup=False,
@@ -362,7 +433,7 @@ with DAG(
             ),
         )
     },
-    tags=["finlake", "bronze", "stocks", "yfinance", "iceberg"],
+    tags=["finlake", "bronze", "silver", "gold", "stocks", "yfinance", "iceberg", "dbt"],
 ) as dag:
     ensure_warehouse_bucket = PythonOperator(
         task_id="ensure_minio_warehouse_bucket",
@@ -374,4 +445,9 @@ with DAG(
         python_callable=submit_bronze_stock_job,
     )
 
-    ensure_warehouse_bucket >> submit_stock_ingest
+    build_analytics_models = PythonOperator(
+        task_id="run_dbt_analytics_build",
+        python_callable=run_dbt_analytics_build,
+    )
+
+    ensure_warehouse_bucket >> submit_stock_ingest >> build_analytics_models
