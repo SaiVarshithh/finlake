@@ -1,9 +1,9 @@
 # SAP Fioneer FSDM 2023 — Beginner-to-End-to-End Guide
 
-> **Research baseline:** 25 August 2026  
-> **Product line covered:** Fioneer Financial Services Data Management 2023  
-> **Current documented feature package at the time of research:** FSDM 2023 1.6.0 (FP06), published 22 May 2026  
-> **Primary source:** [FSDM product documentation](https://fsdm.docs.fioneer.com/latest/en/)  
+> **Research baseline:** 25 August 2026
+> **Product line covered:** Fioneer Financial Services Data Management 2023
+> **Current documented feature package at the time of research:** FSDM 2023 1.6.0 (FP06), published 22 May 2026
+> **Primary source:** [FSDM product documentation](https://fsdm.docs.fioneer.com/latest/en/)
 > **Audience:** A reader starting with no SAP, banking-accounting, or temporal-data background
 
 ---
@@ -28,26 +28,26 @@ The simplest mental model is:
 
 ## 2. Learn these small concepts first
 
-| Term | Very simple meaning | Concrete banking example |
-|---|---|---|
-| **System of record** | The operational system that originally owns a fact. | A loan-origination system creates home-loan contract `HL-1001`. |
-| **Master data** | Relatively stable objects used by transactions. | Customer, contract, security, legal entity, product. |
-| **Transaction / flow data** | Something that happened. | A ₹50,000 loan repayment on 15 August. |
-| **Result data / key-date value** | A calculated value as of a date. | Loan amortized cost or probability of default on 31 March. |
-| **Semantic model** | A common definition of business objects and how they relate. | Every source agrees what “Financial Contract,” “Borrower,” and “Interest” mean. |
-| **Harmonization** | Converting differently shaped/source-coded facts into one standard meaning. | `MORTGAGE`, `HL`, and `HOME_LOAN` become one FSDM product/category representation. |
-| **Ledger** | The official collection of accounting entries. | Debit Loan Receivable, credit Cash. |
-| **Subledger** | A detailed ledger for one domain that feeds the general ledger. | Contract-level loan accounting, later summarized for FI-GL. |
-| **General ledger (G/L)** | The enterprise-level accounting book used for balance sheet and profit-and-loss reporting. | All loan receivables for a company code are represented in G/L accounts. |
-| **Valuation** | Calculating what an asset/liability is worth under an accounting rule. | Amortized cost of a loan under IFRS 9. |
-| **GAAP/accounting principle** | A rulebook for financial reporting. | IFRS and local GAAP may value the same loan differently. |
-| **ABAP Platform** | SAP’s application runtime and development platform. | It runs FSDM/FPSL application logic, services, jobs, authorizations, and Fiori apps. |
-| **SAP HANA** | SAP’s in-memory relational database. | It stores FSDM managed tables and executes CDS/SQL logic close to the data. |
-| **Fiori** | SAP’s web user-experience technology. | An administrator opens the FSDM Loads app in the Fiori Launchpad. |
-| **CDS view** | A reusable, semantically described database view defined in ABAP. | A view joins contract, interest, and borrower information for FPSL. |
-| **API** | A controlled machine-to-machine interface. | A source integration calls the FSDM Load REST API. |
-| **ETL** | Extract, transform, load. | Read loans from a core system, map their fields, and load FSDM. |
-| **Bitemporal** | Keeping both “when true in business” and “when the database knew it.” | A rate effective 1 July is entered on 10 July and corrected on 12 July. |
+| Term                                   | Very simple meaning                                                                        | Concrete banking example                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **System of record**             | The operational system that originally owns a fact.                                        | A loan-origination system creates home-loan contract`HL-1001`.                         |
+| **Master data**                  | Relatively stable objects used by transactions.                                            | Customer, contract, security, legal entity, product.                                     |
+| **Transaction / flow data**      | Something that happened.                                                                   | A ₹50,000 loan repayment on 15 August.                                                  |
+| **Result data / key-date value** | A calculated value as of a date.                                                           | Loan amortized cost or probability of default on 31 March.                               |
+| **Semantic model**               | A common definition of business objects and how they relate.                               | Every source agrees what “Financial Contract,” “Borrower,” and “Interest” mean.    |
+| **Harmonization**                | Converting differently shaped/source-coded facts into one standard meaning.                | `MORTGAGE`, `HL`, and `HOME_LOAN` become one FSDM product/category representation. |
+| **Ledger**                       | The official collection of accounting entries.                                             | Debit Loan Receivable, credit Cash.                                                      |
+| **Subledger**                    | A detailed ledger for one domain that feeds the general ledger.                            | Contract-level loan accounting, later summarized for FI-GL.                              |
+| **General ledger (G/L)**         | The enterprise-level accounting book used for balance sheet and profit-and-loss reporting. | All loan receivables for a company code are represented in G/L accounts.                 |
+| **Valuation**                    | Calculating what an asset/liability is worth under an accounting rule.                     | Amortized cost of a loan under IFRS 9.                                                   |
+| **GAAP/accounting principle**    | A rulebook for financial reporting.                                                        | IFRS and local GAAP may value the same loan differently.                                 |
+| **ABAP Platform**                | SAP’s application runtime and development platform.                                       | It runs FSDM/FPSL application logic, services, jobs, authorizations, and Fiori apps.     |
+| **SAP HANA**                     | SAP’s in-memory relational database.                                                      | It stores FSDM managed tables and executes CDS/SQL logic close to the data.              |
+| **Fiori**                        | SAP’s web user-experience technology.                                                     | An administrator opens the FSDM Loads app in the Fiori Launchpad.                        |
+| **CDS view**                     | A reusable, semantically described database view defined in ABAP.                          | A view joins contract, interest, and borrower information for FPSL.                      |
+| **API**                          | A controlled machine-to-machine interface.                                                 | A source integration calls the FSDM Load REST API.                                       |
+| **ETL**                          | Extract, transform, load.                                                                  | Read loans from a core system, map their fields, and load FSDM.                          |
+| **Bitemporal**                   | Keeping both “when true in business” and “when the database knew it.”                  | A rate effective 1 July is entered on 10 July and corrected on 12 July.                  |
 
 ---
 
@@ -172,23 +172,23 @@ The **Conceptual Data Model (CDM)** is business-oriented. The **Physical Data Mo
 
 ### 5.2 Core building blocks, in beginner language
 
-| Building block | What it does | Actual conceptual example |
-|---|---|---|
-| **Diagram** | Groups related model objects visually. | The Bank Account diagram brings together the account, interest, fee, limit, and related partner concepts. |
-| **Entity** | Represents an identifiable business thing or concept. | `Financial Contract` represents loan contract `HL-1001`. |
-| **Attribute** | Describes one property of an entity. | `FixedRate = 8.25%` on an Interest entity. |
-| **Domain** | Reusable datatype plus business meaning/constraints. | Every amount field uses a consistent Amount domain instead of teams choosing incompatible decimals. |
-| **Code list/value code** | Allowed standardized values for a domain. | Lifecycle status permits `Active`, `Matured`, and `Cancelled` rather than arbitrary spellings. |
-| **Semantic key** | Business identity of a record. | `(OriginatingSourceSystem, FinancialContractID)` identifies the loan even though tables also have technical keys. |
-| **Alternative semantic key** | Another approved way to find identity during a load. | A migrated contract can be matched using a legacy contract reference when the new ID is not yet populated. |
-| **Relationship** | Connects business objects with cardinality. | One customer can have many loan contracts; each assignment records whether that partner is borrower or guarantor. |
-| **Assignment entity** | Represents an indirect many-to-many relationship and can carry facts about the link. | `Business Partner Contract Assignment` links many partners to many contracts and stores each partner’s role. |
-| **Inheritance** | A specialized entity receives properties of a broader entity. | `Loan` is a specialized `Financial Contract`; it inherits common contract identity and validity, then adds loan-specific properties. |
-| **Persisted/non-persisted entity** | Determines whether a CDM object gets its own physical table. | A conceptual subtype may be flattened into a parent/child PDM table instead of creating another table. |
-| **Denormalization** | Stores related conceptual attributes together for efficient physical access. | A 1:1 detail’s fields may be generated into the dominant entity’s PDM table. |
-| **Product catalog** | Standard hierarchy/classification of banking products. | A source mortgage maps to a standard catalog item used consistently by the FPSL adapter. |
-| **Managed table** | FSDM-managed PDM table with generated lifecycle/view behavior. | The Financial Contract active table contains currently known system versions. |
-| **Managed view** | Governed CDS view with metadata, lineage, result-set support, and optional generated UI/write behavior. | A contract view joins contract and interest facts and exposes their lineage. |
+| Building block                           | What it does                                                                                            | Actual conceptual example                                                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Diagram**                        | Groups related model objects visually.                                                                  | The Bank Account diagram brings together the account, interest, fee, limit, and related partner concepts.                                |
+| **Entity**                         | Represents an identifiable business thing or concept.                                                   | `Financial Contract` represents loan contract `HL-1001`.                                                                             |
+| **Attribute**                      | Describes one property of an entity.                                                                    | `FixedRate = 8.25%` on an Interest entity.                                                                                             |
+| **Domain**                         | Reusable datatype plus business meaning/constraints.                                                    | Every amount field uses a consistent Amount domain instead of teams choosing incompatible decimals.                                      |
+| **Code list/value code**           | Allowed standardized values for a domain.                                                               | Lifecycle status permits`Active`, `Matured`, and `Cancelled` rather than arbitrary spellings.                                      |
+| **Semantic key**                   | Business identity of a record.                                                                          | `(OriginatingSourceSystem, FinancialContractID)` identifies the loan even though tables also have technical keys.                      |
+| **Alternative semantic key**       | Another approved way to find identity during a load.                                                    | A migrated contract can be matched using a legacy contract reference when the new ID is not yet populated.                               |
+| **Relationship**                   | Connects business objects with cardinality.                                                             | One customer can have many loan contracts; each assignment records whether that partner is borrower or guarantor.                        |
+| **Assignment entity**              | Represents an indirect many-to-many relationship and can carry facts about the link.                    | `Business Partner Contract Assignment` links many partners to many contracts and stores each partner’s role.                          |
+| **Inheritance**                    | A specialized entity receives properties of a broader entity.                                           | `Loan` is a specialized `Financial Contract`; it inherits common contract identity and validity, then adds loan-specific properties. |
+| **Persisted/non-persisted entity** | Determines whether a CDM object gets its own physical table.                                            | A conceptual subtype may be flattened into a parent/child PDM table instead of creating another table.                                   |
+| **Denormalization**                | Stores related conceptual attributes together for efficient physical access.                            | A 1:1 detail’s fields may be generated into the dominant entity’s PDM table.                                                           |
+| **Product catalog**                | Standard hierarchy/classification of banking products.                                                  | A source mortgage maps to a standard catalog item used consistently by the FPSL adapter.                                                 |
+| **Managed table**                  | FSDM-managed PDM table with generated lifecycle/view behavior.                                          | The Financial Contract active table contains currently known system versions.                                                            |
+| **Managed view**                   | Governed CDS view with metadata, lineage, result-set support, and optional generated UI/write behavior. | A contract view joins contract and interest facts and exposes their lineage.                                                             |
 
 FSDM supports 1:1 and 1:n relationships. Instead of direct n:m relationships, FSDM 2023 introduces assignment entities so that properties can later be added to the relationship ([Relationships](https://fsdm.docs.fioneer.com/latest/en/5-DataModel/05_Relationships)). Domains improve governance by making data types and allowed values consistent ([Domains](https://fsdm.docs.fioneer.com/latest/en/5-DataModel/03_Domains)).
 
@@ -252,44 +252,44 @@ sequenceDiagram
 
 ### 6.2 Draft, active, and history
 
-| Status | Meaning | Example |
-|---|---|---|
-| **Draft** | Data has arrived but is not yet activated for normal business use. | A package with 100,000 loans is staged while validation runs. |
-| **Active** | Versions currently known by the system are available to standard business views. | The currently known interest-rate periods for `HL-1001`. |
-| **History** | Superseded system versions retained for traceability/time travel. | The version showing the mistaken 8.5% rate that the bank knew from 10–12 July. |
+| Status            | Meaning                                                                          | Example                                                                         |
+| ----------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Draft**   | Data has arrived but is not yet activated for normal business use.               | A package with 100,000 loans is staged while validation runs.                   |
+| **Active**  | Versions currently known by the system are available to standard business views. | The currently known interest-rate periods for`HL-1001`.                       |
+| **History** | Superseded system versions retained for traceability/time travel.                | The version showing the mistaken 8.5% rate that the bank knew from 10–12 July. |
 
 Draft records include load/package/record identifiers. Active and history storage use generated technical keys such as record number and partition key. After successful activation, draft data is cleaned up. Technical CDS views expose table-level details; business views hide some technical mechanics ([Data tables and views](https://fsdm.docs.fioneer.com/latest/en/4-ABAPCloud/G2K_ABAP)).
 
 ### 6.3 Write options
 
-| Interface/mechanism | Best fit | Example |
-|---|---|---|
-| **FSDM Files app / File Store** | Manual implementation/testing and controlled file staging. Supports CSV, XLSX, JSON, and ZIP conventions. | An analyst uploads a small product-catalog CSV during setup. |
-| **WebDAV** | File-store access from a desktop/tool during implementation or special file workflows. | A test team copies scenario files into its folder. |
-| **Load REST API (OpenAPI)** | Recommended high-volume external loading path. | An enterprise ETL posts loan packages and then closes/activates the load. |
-| **RFC API** | SAP-to-SAP communication. | An ABAP source calls the load functions through an RFC destination. |
-| **AMDP `WRITE_DRAFT`** | Data already in HANA or reachable by HANA remote sources, avoiding movement through the ABAP app server. | A HANA-resident staging table writes directly into generated draft structures. |
-| **Write-enabled managed view** | FP06 governed outbound/write-through scenario to FPSL or another S/4HANA table through annotated managed views. | An activated result view supplies target records to an FPSL-owned table. |
-| **Post-Activation Procedure (PAP)** | Near-real-time follow-on procedure after activation. | Once a settlement load activates, an AMDP triggers the configured downstream preparation logic. |
+| Interface/mechanism                       | Best fit                                                                                                        | Example                                                                                         |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **FSDM Files app / File Store**     | Manual implementation/testing and controlled file staging. Supports CSV, XLSX, JSON, and ZIP conventions.       | An analyst uploads a small product-catalog CSV during setup.                                    |
+| **WebDAV**                          | File-store access from a desktop/tool during implementation or special file workflows.                          | A test team copies scenario files into its folder.                                              |
+| **Load REST API (OpenAPI)**         | Recommended high-volume external loading path.                                                                  | An enterprise ETL posts loan packages and then closes/activates the load.                       |
+| **RFC API**                         | SAP-to-SAP communication.                                                                                       | An ABAP source calls the load functions through an RFC destination.                             |
+| **AMDP `WRITE_DRAFT`**            | Data already in HANA or reachable by HANA remote sources, avoiding movement through the ABAP app server.        | A HANA-resident staging table writes directly into generated draft structures.                  |
+| **Write-enabled managed view**      | FP06 governed outbound/write-through scenario to FPSL or another S/4HANA table through annotated managed views. | An activated result view supplies target records to an FPSL-owned table.                        |
+| **Post-Activation Procedure (PAP)** | Near-real-time follow-on procedure after activation.                                                            | Once a settlement load activates, an AMDP triggers the configured downstream preparation logic. |
 
 FSDM recommends REST for mass upload; manual file/ABAP techniques are more suitable for implementation and testing ([Write Interfaces](https://fsdm.docs.fioneer.com/latest/en/5-Integration/10-Integrate_Data/Write_Interfaces)). The File Store is staging, not a replacement for a production-grade ingestion/ETL design ([FSDM Files](https://fsdm.docs.fioneer.com/latest/en/4-ABAPCloud/30-FioriApps/Admin/App_File_Manager)).
 
 ### 6.4 Activation capabilities
 
-| Capability | Meaning | Example |
-|---|---|---|
-| **Transactional load** | Related changes are controlled as a load rather than appearing halfway through ingestion. | Contract and interest records are staged before activation. |
-| **Semantic-key matching** | Activation matches the business object, not merely a generated row ID. | Incoming `CORE01 + HL-1001` finds the existing loan. |
-| **Delta determination** | Unchanged data can avoid creating another system version. | A nightly identical loan snapshot creates no new version. |
-| **No-delta option** | Force a new version even when content appears unchanged. | A regulated snapshot must record that a certified load occurred. |
-| **Upsert** | Insert if absent, update/version if present. | A new loan is inserted; an existing loan’s future rate period is revised. |
-| **Change-indicator delete** | Delete/delimit the requested validity interval according to the entity’s versioning. | Remove a fee only for 1–30 September without erasing other valid periods. |
-| **Anonymization on load** | Replace sensitive fields with substitutes, subject to authorization. | Production customer names become synthetic names in a test system. |
-| **NULL handling** | Distinguish an unknown/missing value from a literal blank or zero. | `CollateralValue = NULL` means not known; `0` means known to have no value. |
-| **Packages and split/subloads** | Divide a large load for processing/diagnosis. | Split 20 million contracts into independently processed packages. |
-| **Parallel/data-set locking** | Fine-grained locks allow independent data sets to activate concurrently. | Legal-entity A and B data sets load in parallel without changing the same partition. |
-| **Partial activation (FP06)** | Activate eligible parts of a load to improve scalability/operations. | Valid contract packages activate while a separately handled package is investigated, according to configured semantics. |
-| **Logs and status monitoring** | Follow open, closed, activating, active, or error states and inspect messages. | An overlap error links an operator to the problematic draft data. |
+| Capability                            | Meaning                                                                                   | Example                                                                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Transactional load**          | Related changes are controlled as a load rather than appearing halfway through ingestion. | Contract and interest records are staged before activation.                                                             |
+| **Semantic-key matching**       | Activation matches the business object, not merely a generated row ID.                    | Incoming`CORE01 + HL-1001` finds the existing loan.                                                                   |
+| **Delta determination**         | Unchanged data can avoid creating another system version.                                 | A nightly identical loan snapshot creates no new version.                                                               |
+| **No-delta option**             | Force a new version even when content appears unchanged.                                  | A regulated snapshot must record that a certified load occurred.                                                        |
+| **Upsert**                      | Insert if absent, update/version if present.                                              | A new loan is inserted; an existing loan’s future rate period is revised.                                              |
+| **Change-indicator delete**     | Delete/delimit the requested validity interval according to the entity’s versioning.     | Remove a fee only for 1–30 September without erasing other valid periods.                                              |
+| **Anonymization on load**       | Replace sensitive fields with substitutes, subject to authorization.                      | Production customer names become synthetic names in a test system.                                                      |
+| **NULL handling**               | Distinguish an unknown/missing value from a literal blank or zero.                        | `CollateralValue = NULL` means not known; `0` means known to have no value.                                         |
+| **Packages and split/subloads** | Divide a large load for processing/diagnosis.                                             | Split 20 million contracts into independently processed packages.                                                       |
+| **Parallel/data-set locking**   | Fine-grained locks allow independent data sets to activate concurrently.                  | Legal-entity A and B data sets load in parallel without changing the same partition.                                    |
+| **Partial activation (FP06)**   | Activate eligible parts of a load to improve scalability/operations.                      | Valid contract packages activate while a separately handled package is investigated, according to configured semantics. |
+| **Logs and status monitoring**  | Follow open, closed, activating, active, or error states and inspect messages.            | An overlap error links an operator to the problematic draft data.                                                       |
 
 Deletion is temporal for versioned data: it delimits/moves the affected period into history. Only a non-versioned record is physically removed from active storage by that operation ([Loading and Activating Data](https://fsdm.docs.fioneer.com/latest/en/1-G2K/20-Versioning/LoadingAndActivatingData)).
 
@@ -309,12 +309,12 @@ These answer different audit questions:
 
 ### 7.2 Versioning schemes
 
-| Scheme | Fields | What it answers | Concrete example |
-|---|---|---|---|
-| **Not versioned** | No temporal validity pair | Only the current stored state matters. | A technical privacy-detail record is physically removed when deleted. |
-| **System-time versioned** | `SystemValidFrom`, `SystemValidTo` | When did FSDM know each version? | A settlement is stored at 10:00; a later system version would normally preserve the previous record, subject to FPSL restrictions. |
-| **Business-time versioned** | `BusinessValidFrom`, `BusinessValidTo` | When is it true in business? | A custom extension stores a planned branch classification effective next month. FSDM 2023 ships no standard entity using business-only versioning, but extensions may use it. |
-| **Bitemporal** | Both validity pairs | What was true, and what did the system know at any earlier system time? | A loan rate effective 1 July is entered late on 10 July, then corrected on 12 July. |
+| Scheme                            | Fields                                     | What it answers                                                         | Concrete example                                                                                                                                                              |
+| --------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Not versioned**           | No temporal validity pair                  | Only the current stored state matters.                                  | A technical privacy-detail record is physically removed when deleted.                                                                                                         |
+| **System-time versioned**   | `SystemValidFrom`, `SystemValidTo`     | When did FSDM know each version?                                        | A settlement is stored at 10:00; a later system version would normally preserve the previous record, subject to FPSL restrictions.                                            |
+| **Business-time versioned** | `BusinessValidFrom`, `BusinessValidTo` | When is it true in business?                                            | A custom extension stores a planned branch classification effective next month. FSDM 2023 ships no standard entity using business-only versioning, but extensions may use it. |
+| **Bitemporal**              | Both validity pairs                        | What was true, and what did the system know at any earlier system time? | A loan rate effective 1 July is entered late on 10 July, then corrected on 12 July.                                                                                           |
 
 The versioning scheme is configured per entity in the CDM and carried to the PDM. A Financial Contract can be bitemporal while event-like Settlement data uses only system time ([Versioning](https://fsdm.docs.fioneer.com/latest/en/1-G2K/20-Versioning/Versioning)).
 
@@ -334,19 +334,19 @@ If version A is valid `[2026-01-01, 2026-07-01)` and version B is valid `[2026-0
 
 Suppose home-loan `HL-1001` legally moved from 8.00% to 8.50% on **1 July**. The update reached FSDM only on **10 July**. On **12 July**, operations discovered that the signed rate was really **8.25%**, not 8.50%.
 
-| Rate | Business valid period | System valid period | Interpretation |
-|---:|---|---|---|
-| 8.00% | `[1 Jan, 1 Jul)` | `[1 Jan system load, ∞)` | The old rate remains true before July. |
-| 8.50% | `[1 Jul, ∞)` | `[10 Jul, 12 Jul)` | This is what FSDM believed for two days. |
-| 8.25% | `[1 Jul, ∞)` | `[12 Jul, ∞)` | Corrected knowledge, still effective from 1 July. |
+|  Rate | Business valid period | System valid period         | Interpretation                                    |
+| ----: | --------------------- | --------------------------- | ------------------------------------------------- |
+| 8.00% | `[1 Jan, 1 Jul)`    | `[1 Jan system load, ∞)` | The old rate remains true before July.            |
+| 8.50% | `[1 Jul, ∞)`       | `[10 Jul, 12 Jul)`        | This is what FSDM believed for two days.          |
+| 8.25% | `[1 Jul, ∞)`       | `[12 Jul, ∞)`            | Corrected knowledge, still effective from 1 July. |
 
 Now four questions become possible:
 
-| Question | Answer |
-|---|---|
-| What rate applies to business date 5 July, using today’s knowledge? | 8.25% |
-| What did the system say on 11 July for business date 5 July? | 8.50% |
-| What applies to business date 20 June, using today’s knowledge? | 8.00% |
+| Question                                                                      | Answer  |
+| ----------------------------------------------------------------------------- | ------- |
+| What rate applies to business date 5 July, using today’s knowledge?          | 8.25%   |
+| What did the system say on 11 July for business date 5 July?                  | 8.50%   |
+| What applies to business date 20 June, using today’s knowledge?              | 8.00%   |
 | When did the bank’s stored knowledge change from the wrong to correct value? | 12 July |
 
 This is more powerful than a simple `last_updated_at`. A single timestamp cannot reconstruct both the real-world effective date and the knowledge/correction timeline.
@@ -392,17 +392,17 @@ Timestamp fields are stored in UTC. Fiori can display the user’s local time zo
 
 ### 8.1 Read interfaces and views
 
-| Feature | Purpose | Example |
-|---|---|---|
-| **Model REST API** | Query model metadata and support extensions. | A tool retrieves the entity definition for Financial Contract. |
-| **REST read/extraction** | Controlled HTTP extraction of data/view results. | A downstream reporting service reads a governed contract view. |
-| **ODBC for ABAP/CDS** | SQL-style read access without direct unmanaged HANA table access. | Excel/BI connects through the SAP ABAP ODBC driver to an exposed CDS service. |
-| **ABAP CDS views** | Reusable semantic/analytical views close to HANA. | A view calculates active contracts by product hierarchy. |
-| **Technical views** | Show draft/active/history plus technical load and storage fields. | Operations traces load 7944, package 3, record 27. |
-| **Business views** | Hide unnecessary storage mechanics and expose semantic keys/validity. | An application reads the currently known loan view. |
-| **Historical parameterized views** | “Time travel” over system and business dates. | An auditor reconstructs month-end using what was known at close time. |
-| **Managed views** | Catalog, document, generate UI for, trace lineage of, and expose CDS views. | A modeler sees that `FPSL Contract Rate` derives from FSDM Interest. |
-| **Result sets** | Temporary, consistent materialization of a parameterized view at a timestamp. | FPSL extraction holds a stable result while source data continues changing. |
+| Feature                                  | Purpose                                                                       | Example                                                                       |
+| ---------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Model REST API**                 | Query model metadata and support extensions.                                  | A tool retrieves the entity definition for Financial Contract.                |
+| **REST read/extraction**           | Controlled HTTP extraction of data/view results.                              | A downstream reporting service reads a governed contract view.                |
+| **ODBC for ABAP/CDS**              | SQL-style read access without direct unmanaged HANA table access.             | Excel/BI connects through the SAP ABAP ODBC driver to an exposed CDS service. |
+| **ABAP CDS views**                 | Reusable semantic/analytical views close to HANA.                             | A view calculates active contracts by product hierarchy.                      |
+| **Technical views**                | Show draft/active/history plus technical load and storage fields.             | Operations traces load 7944, package 3, record 27.                            |
+| **Business views**                 | Hide unnecessary storage mechanics and expose semantic keys/validity.         | An application reads the currently known loan view.                           |
+| **Historical parameterized views** | “Time travel” over system and business dates.                               | An auditor reconstructs month-end using what was known at close time.         |
+| **Managed views**                  | Catalog, document, generate UI for, trace lineage of, and expose CDS views.   | A modeler sees that`FPSL Contract Rate` derives from FSDM Interest.         |
+| **Result sets**                    | Temporary, consistent materialization of a parameterized view at a timestamp. | FPSL extraction holds a stable result while source data continues changing.   |
 
 FSDM discourages direct SQL access to unmanaged underlying ABAP/HANA tables. CDS-based access preserves semantics and authorization behavior ([ODBC API](https://fsdm.docs.fioneer.com/latest/en/5-Integration/10-Integrate_Data/20-ODBC), [ABAP CDS Views](https://fsdm.docs.fioneer.com/latest/en/5-Integration/10-Integrate_Data/CDS_Views)).
 
@@ -514,15 +514,15 @@ The precise object ownership must be fixed in a project architecture; “both sy
 
 ### 10.1 The two scenarios
 
-| Topic | **Harmonization scenario (recommended for new customers)** | **Replication scenario (older/existing option)** |
-|---|---|---|
-| Basic idea | FPSL directly reads/uses FSDM-governed source data; no second physical copy of those source objects in FPSL. | FPSL pulls mapped data and stores a separate copy in its source-data structures. |
-| Deployment | FSDM and FPSL must be separate products installed on the **same supported S/4HANA/HANA instance** for the documented scenario. | They may be in one or two HANA instances; RFC/WebSocket RFC or local calls and DL process chains transfer data. |
-| Source of truth | FSDM is the single source for integrated master/flow objects. | FSDM is source, but FPSL contains a replicated operational copy. |
-| Access mechanism | FPSL-defined interfaces and FSDM business-object CDS views combine all relevant FSDM tables. | Provisioning/extraction views → mapping views → RFC-enabled functions/DL process → FPSL storage. |
-| Latency | Direct shared access; avoids scheduled-copy latency for governed objects. | Batch/delta cadence depends on process chains and load completion. |
-| Reconciliation | Less duplication; shared semantics improve consistency. | Must reconcile FSDM source versions with FPSL replicated copies and failed/restarted deltas. |
-| Migration/fit | Target architecture for new implementations. | Supported for existing implementations; switching requires project design and testing. |
+| Topic            | **Harmonization scenario (recommended for new customers)**                                                                    | **Replication scenario (older/existing option)**                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Basic idea       | FPSL directly reads/uses FSDM-governed source data; no second physical copy of those source objects in FPSL.                        | FPSL pulls mapped data and stores a separate copy in its source-data structures.                                |
+| Deployment       | FSDM and FPSL must be separate products installed on the**same supported S/4HANA/HANA instance** for the documented scenario. | They may be in one or two HANA instances; RFC/WebSocket RFC or local calls and DL process chains transfer data. |
+| Source of truth  | FSDM is the single source for integrated master/flow objects.                                                                       | FSDM is source, but FPSL contains a replicated operational copy.                                                |
+| Access mechanism | FPSL-defined interfaces and FSDM business-object CDS views combine all relevant FSDM tables.                                        | Provisioning/extraction views → mapping views → RFC-enabled functions/DL process → FPSL storage.             |
+| Latency          | Direct shared access; avoids scheduled-copy latency for governed objects.                                                           | Batch/delta cadence depends on process chains and load completion.                                              |
+| Reconciliation   | Less duplication; shared semantics improve consistency.                                                                             | Must reconcile FSDM source versions with FPSL replicated copies and failed/restarted deltas.                    |
+| Migration/fit    | Target architecture for new implementations.                                                                                        | Supported for existing implementations; switching requires project design and testing.                          |
 
 Fioneer explicitly recommends harmonization for new customers and says FPSL requires separate licensing ([FSDM–FPSL integration](https://fsdm.docs.fioneer.com/latest/en/5-Integration/20-Integrate-Product/FPSL)). SAP’s prerequisites for direct FSDM sourcing include compatible feature packages and co-installation on the same S/4HANA instance ([SAP integrated FSDM source](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/273982318bde4278abeff26a3b020fd9/5812469f074143c292c683c170091055.html)).
 
@@ -739,62 +739,62 @@ FSDM reconstructs what the system knew on 11 July; load logs identify the inboun
 
 This table is a compact “did we cover it?” reference.
 
-| FSDM capability | Practical value | One example |
-|---|---|---|
-| Unified banking model | One meaning across sources | Three mortgage codes become one product concept. |
-| Single source of truth | Reduces duplicate/conflicting facts | Finance and risk read the same contract version. |
-| Granular data | Supports drill-down | Trace a G/L total back toward contract `HL-1001`. |
-| Result reuse | Avoid recalculating everywhere | Reuse approved PD/LGD results for reporting/accounting input. |
-| CDM | Business-readable design | Model Customer–Loan–Collateral relationships. |
-| PDM | HANA-optimized runtime | Generated managed tables store those objects efficiently. |
-| CDM-to-PDM mapping | Explain model transformation | Trace conceptual Fixed Rate to its physical column. |
-| Workbench | Browse/model/generate | Add green-taxonomy eligibility in VS Code. |
-| Textual model + Git | Govern model changes | Review a new attribute in a pull request. |
-| Extension model | Add bank-specific scope | Add local regulatory classification. |
-| Domains/code lists | Consistent quality | Only approved lifecycle-status codes are accepted. |
-| Relationships/cardinality | Correct object connections | One loan has many scheduled payments. |
-| Assignment entity | Rich many-to-many link | Store borrower/guarantor role on partner–contract link. |
-| Inheritance | Reuse broad definitions | Loan inherits Financial Contract properties. |
-| Denormalization/PDM optimization | Efficient access | 1:1 detail fields share a physical table. |
-| Product catalog | Product harmonization/FPSL mapping | Map `MORT-FIX` to standard home-loan product. |
-| System versioning | Knowledge-time audit | Show when a rating correction was stored. |
-| Business versioning | Effective dating | Rate starts next quarter. |
-| Bitemporal versioning | Full “effective vs known” reconstruction | Late, then corrected July rate. |
-| Open-closed periods | Unambiguous boundaries | Old rate ends exactly when new rate starts. |
-| Draft/active/history | Safe lifecycle and traceability | Stage, activate, retain replaced version. |
-| Delta determination | Avoid redundant versions/work | Identical nightly snapshot creates no new version. |
-| Upsert | Simple insert/update behavior | New loan inserts; existing loan versions. |
-| Temporal delete | Remove only an applicable interval | Remove September fee, preserve other months. |
-| Anonymization | Safer non-production data | Replace Asha’s name with a synthetic value. |
-| NULL support | Preserve unknown vs zero | Unknown collateral value is not ₹0. |
-| Loads/packages/subloads | Scale and diagnose | Split 20 million contracts by package. |
-| Data-set locking/parallelism | Concurrent independent activation | Two legal entities load in parallel. |
-| Partial activation | Better large-load operations | Process valid packages without redoing all work. |
-| Approval process | Four-eyes control | Loader and approver are different people. |
-| Manual correction monitoring | Controlled exception handling | Review maturity-date correction. |
-| UTC time logic | Global consistency | India UI converts stored UTC timestamp. |
-| File Store/WebDAV | Controlled implementation staging | Upload sample product catalog. |
-| REST/OpenAPI | Standard mass integration | ETL posts loan packages. |
-| RFC | SAP-to-SAP integration | FPSL calls FSDM extraction function. |
-| AMDP | In-database processing | HANA staging writes to draft without app-server round trip. |
-| Technical/business/historical CDS | Right view for each audience | Operator sees package ID; analyst sees semantic contract. |
-| ODBC | Governed SQL-style access | BI tool queries published CDS. |
-| Managed views | View catalog/governance | Publish a documented custom accounting view. |
-| Write-enabled managed views | Governed outbound write | Activated view writes target data to an FPSL table. |
-| PAP | Post-activation integration | Trigger prepared downstream action after activation. |
-| Result sets | Stable temporary extraction | FPSL processes a snapshot while loads continue. |
-| Lineage | Explain field origin | Report rate traces to Interest.FixedRate. |
-| Tags | Search/ownership/regulation metadata | Filter all `IFRS9` or `CRRIII` objects. |
-| Fiori browsers | Human exploration | Credit analyst views loan, partner, and limits. |
-| Embedded ad hoc analytics | Fast exploration | Pivot active contracts by product and legal entity. |
-| Logs/application jobs/housekeeping | Operability | Diagnose overlap; clean abandoned temporary tables. |
-| Client segregation | Tenant/legal separation | Client A cannot see client B’s data. |
-| `AUTH_OWNER` + DCL | Row-level ownership access | Analyst sees only `IN_BANK` contracts. |
-| Harmonized FPSL integration | No duplicated source copy | FPSL directly reads FSDM contract BO view. |
-| Replicated FPSL integration | Supports existing separated landscapes | Process chain pulls system-time deltas. |
-| Value mapping/filtering | Correct target codes/scope | Send only approved product/status categories. |
-| Sustainable-finance model | ESG/regulatory readiness | Store loan taxonomy and emissions facts. |
-| Extensible system documentation | Context-sensitive project knowledge | Custom view links to bank-authored definition. |
+| FSDM capability                    | Practical value                            | One example                                                   |
+| ---------------------------------- | ------------------------------------------ | ------------------------------------------------------------- |
+| Unified banking model              | One meaning across sources                 | Three mortgage codes become one product concept.              |
+| Single source of truth             | Reduces duplicate/conflicting facts        | Finance and risk read the same contract version.              |
+| Granular data                      | Supports drill-down                        | Trace a G/L total back toward contract`HL-1001`.            |
+| Result reuse                       | Avoid recalculating everywhere             | Reuse approved PD/LGD results for reporting/accounting input. |
+| CDM                                | Business-readable design                   | Model Customer–Loan–Collateral relationships.               |
+| PDM                                | HANA-optimized runtime                     | Generated managed tables store those objects efficiently.     |
+| CDM-to-PDM mapping                 | Explain model transformation               | Trace conceptual Fixed Rate to its physical column.           |
+| Workbench                          | Browse/model/generate                      | Add green-taxonomy eligibility in VS Code.                    |
+| Textual model + Git                | Govern model changes                       | Review a new attribute in a pull request.                     |
+| Extension model                    | Add bank-specific scope                    | Add local regulatory classification.                          |
+| Domains/code lists                 | Consistent quality                         | Only approved lifecycle-status codes are accepted.            |
+| Relationships/cardinality          | Correct object connections                 | One loan has many scheduled payments.                         |
+| Assignment entity                  | Rich many-to-many link                     | Store borrower/guarantor role on partner–contract link.      |
+| Inheritance                        | Reuse broad definitions                    | Loan inherits Financial Contract properties.                  |
+| Denormalization/PDM optimization   | Efficient access                           | 1:1 detail fields share a physical table.                     |
+| Product catalog                    | Product harmonization/FPSL mapping         | Map`MORT-FIX` to standard home-loan product.                |
+| System versioning                  | Knowledge-time audit                       | Show when a rating correction was stored.                     |
+| Business versioning                | Effective dating                           | Rate starts next quarter.                                     |
+| Bitemporal versioning              | Full “effective vs known” reconstruction | Late, then corrected July rate.                               |
+| Open-closed periods                | Unambiguous boundaries                     | Old rate ends exactly when new rate starts.                   |
+| Draft/active/history               | Safe lifecycle and traceability            | Stage, activate, retain replaced version.                     |
+| Delta determination                | Avoid redundant versions/work              | Identical nightly snapshot creates no new version.            |
+| Upsert                             | Simple insert/update behavior              | New loan inserts; existing loan versions.                     |
+| Temporal delete                    | Remove only an applicable interval         | Remove September fee, preserve other months.                  |
+| Anonymization                      | Safer non-production data                  | Replace Asha’s name with a synthetic value.                  |
+| NULL support                       | Preserve unknown vs zero                   | Unknown collateral value is not ₹0.                          |
+| Loads/packages/subloads            | Scale and diagnose                         | Split 20 million contracts by package.                        |
+| Data-set locking/parallelism       | Concurrent independent activation          | Two legal entities load in parallel.                          |
+| Partial activation                 | Better large-load operations               | Process valid packages without redoing all work.              |
+| Approval process                   | Four-eyes control                          | Loader and approver are different people.                     |
+| Manual correction monitoring       | Controlled exception handling              | Review maturity-date correction.                              |
+| UTC time logic                     | Global consistency                         | India UI converts stored UTC timestamp.                       |
+| File Store/WebDAV                  | Controlled implementation staging          | Upload sample product catalog.                                |
+| REST/OpenAPI                       | Standard mass integration                  | ETL posts loan packages.                                      |
+| RFC                                | SAP-to-SAP integration                     | FPSL calls FSDM extraction function.                          |
+| AMDP                               | In-database processing                     | HANA staging writes to draft without app-server round trip.   |
+| Technical/business/historical CDS  | Right view for each audience               | Operator sees package ID; analyst sees semantic contract.     |
+| ODBC                               | Governed SQL-style access                  | BI tool queries published CDS.                                |
+| Managed views                      | View catalog/governance                    | Publish a documented custom accounting view.                  |
+| Write-enabled managed views        | Governed outbound write                    | Activated view writes target data to an FPSL table.           |
+| PAP                                | Post-activation integration                | Trigger prepared downstream action after activation.          |
+| Result sets                        | Stable temporary extraction                | FPSL processes a snapshot while loads continue.               |
+| Lineage                            | Explain field origin                       | Report rate traces to Interest.FixedRate.                     |
+| Tags                               | Search/ownership/regulation metadata       | Filter all`IFRS9` or `CRRIII` objects.                    |
+| Fiori browsers                     | Human exploration                          | Credit analyst views loan, partner, and limits.               |
+| Embedded ad hoc analytics          | Fast exploration                           | Pivot active contracts by product and legal entity.           |
+| Logs/application jobs/housekeeping | Operability                                | Diagnose overlap; clean abandoned temporary tables.           |
+| Client segregation                 | Tenant/legal separation                    | Client A cannot see client B’s data.                         |
+| `AUTH_OWNER` + DCL               | Row-level ownership access                 | Analyst sees only`IN_BANK` contracts.                       |
+| Harmonized FPSL integration        | No duplicated source copy                  | FPSL directly reads FSDM contract BO view.                    |
+| Replicated FPSL integration        | Supports existing separated landscapes     | Process chain pulls system-time deltas.                       |
+| Value mapping/filtering            | Correct target codes/scope                 | Send only approved product/status categories.                 |
+| Sustainable-finance model          | ESG/regulatory readiness                   | Store loan taxonomy and emissions facts.                      |
+| Extensible system documentation    | Context-sensitive project knowledge        | Custom view links to bank-authored definition.                |
 
 ---
 
@@ -852,17 +852,17 @@ This table is a compact “did we cover it?” reference.
 
 ## 18. Common misconceptions corrected
 
-| Misconception | Correct understanding |
-|---|---|
-| “FSDM is just an SAP table set.” | It combines a conceptual banking model, generated PDM, temporal/load lifecycle, APIs/views, governance tools, and integration content. |
-| “History means a copy of yesterday’s table.” | FSDM history is tied to system-valid versions; bitemporal queries add business-valid time. |
-| “Bitemporal means two copies.” | It means two independent validity dimensions, not merely duplicate storage. |
-| “FPSL is part of FSDM.” | They are separately licensed products with integration content and distinct responsibilities. |
-| “FPSL is the G/L.” | It is a specialist subledger that transfers aggregated entries to a G/L. |
-| “S/4HANA and HANA are synonyms.” | S/4HANA is the application suite; HANA is the database platform. |
-| “BTP is the cloud version of S/4HANA.” | BTP is a cloud technology platform for integration, extension, data/analytics, automation, and AI. |
-| “Harmonization means no mapping.” | It avoids a replicated FPSL source copy, but semantic mapping/configuration still exists. |
-| “Real time is automatic.” | Direct access and post-activation features can reduce latency, but end-to-end latency depends on source delivery, activation, downstream processing, and controls. |
+| Misconception                                   | Correct understanding                                                                                                                                              |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| “FSDM is just an SAP table set.”              | It combines a conceptual banking model, generated PDM, temporal/load lifecycle, APIs/views, governance tools, and integration content.                             |
+| “History means a copy of yesterday’s table.” | FSDM history is tied to system-valid versions; bitemporal queries add business-valid time.                                                                         |
+| “Bitemporal means two copies.”                | It means two independent validity dimensions, not merely duplicate storage.                                                                                        |
+| “FPSL is part of FSDM.”                       | They are separately licensed products with integration content and distinct responsibilities.                                                                      |
+| “FPSL is the G/L.”                            | It is a specialist subledger that transfers aggregated entries to a G/L.                                                                                           |
+| “S/4HANA and HANA are synonyms.”              | S/4HANA is the application suite; HANA is the database platform.                                                                                                   |
+| “BTP is the cloud version of S/4HANA.”        | BTP is a cloud technology platform for integration, extension, data/analytics, automation, and AI.                                                                 |
+| “Harmonization means no mapping.”             | It avoids a replicated FPSL source copy, but semantic mapping/configuration still exists.                                                                          |
+| “Real time is automatic.”                     | Direct access and post-activation features can reduce latency, but end-to-end latency depends on source delivery, activation, downstream processing, and controls. |
 
 ---
 

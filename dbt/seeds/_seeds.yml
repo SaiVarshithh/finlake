@@ -1,0 +1,19 @@
+version: 2
+
+seeds:
+  - name: sector_mapping
+    description: Sector classification for the 20 tickers currently enabled by the stock ingestion job.
+    config:
+      column_types:
+        ticker: varchar
+        sector: varchar
+    columns:
+      - name: ticker
+        description: Uppercase ticker used by Silver prices.
+        data_tests:
+          - not_null
+          - unique
+      - name: sector
+        description: Business sector used for Gold-level aggregation.
+        data_tests:
+          - not_null

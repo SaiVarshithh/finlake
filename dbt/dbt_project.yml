@@ -20,4 +20,11 @@ models:
     silver:
       +schema: silver
       +materialized: table
+    gold:
+      +schema: gold
+      +materialized: table
 
+seeds:
+  finlake:
+    +schema: silver
+    +quote_columns: false

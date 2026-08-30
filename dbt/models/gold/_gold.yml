@@ -1,0 +1,70 @@
+version: 2
+
+models:
+  - name: daily_returns
+    description: Daily close-to-close returns per ticker. The first observation for each ticker has no return.
+    columns:
+      - name: ticker
+        data_tests:
+          - not_null
+      - name: exchange
+        data_tests:
+          - not_null
+      - name: trade_date
+        data_tests:
+          - not_null
+      - name: close
+        data_tests:
+          - not_null
+      - name: previous_close
+        description: Prior available trading observation's close, or null for the ticker's first observation.
+      - name: daily_return
+        description: Decimal close-to-close return, where 0.01 represents one percent.
+      - name: daily_return_pct
+        description: Close-to-close return expressed in percentage points.
+
+  - name: moving_avg_20_50
+    description: Full-window moving averages over 20 and 50 trading observations per ticker.
+    columns:
+      - name: ticker
+        data_tests:
+          - not_null
+      - name: trade_date
+        data_tests:
+          - not_null
+      - name: moving_avg_20d
+        description: Mean close over 20 trading observations; null until the full window exists.
+      - name: moving_avg_50d
+        description: Mean close over 50 trading observations; null until the full window exists.
+
+  - name: volatility_7d_30d
+    description: Sample standard deviation of daily returns over full 7 and 30 trading-observation windows.
+    columns:
+      - name: ticker
+        data_tests:
+          - not_null
+      - name: trade_date
+        data_tests:
+          - not_null
+      - name: volatility_7d
+        description: Seven-observation rolling return volatility; null until seven returns exist.
+      - name: volatility_30d
+        description: Thirty-observation rolling return volatility; null until thirty returns exist.
+
+  - name: sector_performance
+    description: Equal-weighted daily return statistics by sector for mapped tickers.
+    columns:
+      - name: trade_date
+        data_tests:
+          - not_null
+      - name: sector
+        data_tests:
+          - not_null
+      - name: ticker_count
+        description: Number of mapped tickers contributing to the sector and date.
+        data_tests:
+          - not_null
+      - name: average_daily_return
+        description: Equal-weighted mean decimal return across contributing tickers.
+        data_tests:
+          - not_null
